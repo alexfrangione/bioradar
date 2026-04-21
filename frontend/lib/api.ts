@@ -194,9 +194,17 @@ export type Quote = {
 // ---------------------------------------------------------------------------
 // Fetchers
 // ---------------------------------------------------------------------------
+// We rely on the backend's Cache-Control headers rather than forcing
+// `no-store`. That lets Vercel's edge and the browser cache short-lived
+// responses, which is a big perf win for repeat navigation.
+//
+// `next.revalidate` hints Next.js's data cache to revalidate every 60s for
+// server components. Client components still honor the upstream header.
 async function getJSON<T>(path: string): Promise<T | null> {
   try {
-    const res = await fetch(`${API_URL}${path}`, { cache: "no-store" });
+    const res = await fetch(`${API_URL}${path}`, {
+      next: { revalidate: 60 },
+    });
     if (!res.ok) return null;
     return (await res.json()) as T;
   } catch (err) {

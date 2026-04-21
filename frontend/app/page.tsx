@@ -74,9 +74,11 @@ export default function LandingPage() {
   };
 
   // Debounced search. Cancels in-flight lookups when the user types more.
+  // Minimum 2 chars + 350ms debounce — halves search traffic without
+  // noticeably hurting responsiveness.
   useEffect(() => {
     const q = query.trim();
-    if (q.length < 1) {
+    if (q.length < 2) {
       setHits([]);
       setSearching(false);
       return;
@@ -89,7 +91,7 @@ export default function LandingPage() {
       setHits(res?.results ?? []);
       setHighlight(0);
       setSearching(false);
-    }, 220);
+    }, 350);
     return () => {
       cancelled = true;
       clearTimeout(timer);
@@ -107,7 +109,7 @@ export default function LandingPage() {
   }, []);
 
   const showDropdown =
-    open && query.trim().length >= 1 && (hits.length > 0 || searching);
+    open && query.trim().length >= 2 && (hits.length > 0 || searching);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

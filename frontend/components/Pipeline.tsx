@@ -11,6 +11,12 @@ import {
 
 type Props = {
   ticker: string;
+  /**
+   * Server-fetched pipeline data. When provided, the component skips its
+   * client-side fetch and renders immediately — no spinner, no extra round
+   * trip. Leave undefined to fall back to the legacy client fetch.
+   */
+  initialData?: PipelineResponse | null;
 };
 
 /**
@@ -24,13 +30,25 @@ type Props = {
  * plus four active lower-phase trials still reads as Recruiting — the
  * stopped trial is visible in the drilldown.
  */
-export default function Pipeline({ ticker }: Props) {
-  const [data, setData] = useState<PipelineResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export default function Pipeline({ ticker, initialData }: Props) {
+  // Seed state from server data if we have it. `initialData === undefined`
+  // means "no server data was provided" — fetch client-side. A literal
+  // `null` means "server tried but failed" — show the error state.
+  const hasInitial = initialData !== undefined;
+  const [data, setData] = useState<PipelineResponse | null>(
+    hasInitial ? (initialData ?? null) : null,
+  );
+  const [loading, setLoading] = useState(!hasInitial);
+  const [error, setError] = useState<string | null>(
+    hasInitial && initialData === null
+      ? "Couldn't load pipeline. ClinicalTrials.gov or the backend may be unavailable."
+      : null,
+  );
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   useEffect(() => {
+    // Skip the first client fetch when server data was supplied.
+    if (hasInitial) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -50,7 +68,7 @@ export default function Pipeline({ ticker }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [ticker]);
+  }, [ticker, hasInitial]);
 
   const drugs: Drug[] = data?.drugs ?? [];
   const drugCount = data?.drug_count ?? drugs.length;

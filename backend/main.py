@@ -67,6 +67,53 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# ---------------------------------------------------------------------------
+# Cache-Control middleware
+# ---------------------------------------------------------------------------
+# Attach per-endpoint Cache-Control headers so Vercel's edge and the browser
+# can serve repeat requests without hitting Render. `stale-while-revalidate`
+# lets us keep serving the last good value while a background refresh runs.
+#
+# Buckets:
+#   quote    -> 60s fresh / 120s swr   (semi-live price)
+#   prices   -> 300s fresh / 600s swr  (daily bars rarely change intraday)
+#   company  -> 900s fresh / 1800s swr (fundamentals are ~static)
+#   pipeline -> 900s fresh / 1800s swr (CT.gov updates are slow)
+#   catalysts-> 600s fresh / 1200s swr
+#   earnings -> 600s fresh / 1200s swr
+#   search   -> 120s fresh / 300s swr  (autocomplete hot path)
+_CACHE_RULES: tuple[tuple[str, str], ...] = (
+    ("/api/health", "public, max-age=60"),
+    ("/api/search", "public, max-age=120, stale-while-revalidate=300"),
+    ("/quote", "public, max-age=60, stale-while-revalidate=120"),
+    ("/prices", "public, max-age=300, stale-while-revalidate=600"),
+    ("/pipeline", "public, max-age=900, stale-while-revalidate=1800"),
+    ("/catalysts", "public, max-age=600, stale-while-revalidate=1200"),
+    ("/earnings", "public, max-age=600, stale-while-revalidate=1200"),
+    # /api/company/{ticker} catch-all (must come last so the more-specific
+    # /pipeline, /quote, etc. suffixes match first).
+    ("/api/company/", "public, max-age=900, stale-while-revalidate=1800"),
+    ("/api/companies", "public, max-age=3600"),
+)
+
+
+@app.middleware("http")
+async def add_cache_headers(request, call_next):
+    response = await call_next(request)
+    # Only cache GETs on 2xx responses. Skip if handler already set the header.
+    if request.method != "GET" or not (200 <= response.status_code < 300):
+        return response
+    if "cache-control" in (h.lower() for h in response.headers.keys()):
+        return response
+    path = request.url.path
+    for needle, directive in _CACHE_RULES:
+        if needle in path:
+            response.headers["Cache-Control"] = directive
+            break
+    return response
+
+
 # ---------------------------------------------------------------------------
 # Seed data — company fundamentals
 # ---------------------------------------------------------------------------
@@ -181,6 +228,24 @@ TICKER_TO_SPONSOR: dict[str, str] = {
     "VRTX": "Vertex Pharmaceuticals",
     "MRNA": "Moderna",
 }
+
+# Popular biotech tickers — mirrors lib/universe.ts on the frontend. Used by
+# /api/search as a known-healthcare fast-path so autocomplete doesn't pay the
+# EDGAR classification cost for the common case.
+_POPULAR_HEALTHCARE: frozenset[str] = frozenset(
+    {
+        "MRNA", "VRTX", "CRSP", "BEAM", "SRPT", "NTLA", "REGN", "BNTX",
+        "EDIT", "BIIB", "ALNY", "MDGL", "ARWR", "INSM", "GILD",
+        # Megacap pharma — common searches
+        "PFE", "MRK", "LLY", "JNJ", "ABBV", "NVO", "AZN", "BMY", "AMGN",
+        "SNY", "GSK", "NVS", "RHHBY", "TAK",
+        # Common mid/small biotech searches
+        "IONS", "MRTX", "BLUE", "VRCA", "KRYS", "LGND", "ACAD",
+        "EXEL", "HALO", "BMRN", "SGEN", "RIGL", "RARE", "VKTX", "AXSM",
+        "CRNX", "CPRX", "ETNB", "IMVT", "INCY", "ITCI", "MNMD", "NBIX",
+        "PTCT", "RNA", "RYTM", "SAVA", "SMMT", "TGTX", "TVTX",
+    }
+)
 
 # ---------------------------------------------------------------------------
 # Seed data — catalyst events
@@ -633,6 +698,37 @@ def _phase_rank(phases: list[str]) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Cache pre-warming
+# ---------------------------------------------------------------------------
+# Biggest single cause of "first visit is slow" is cold per-process caches
+# after a Render deploy or restart. On startup, fetch the popular universe's
+# company + pipeline data in the background. Errors are swallowed — this is
+# pure optimization, the real endpoints work fine if warming fails.
+async def _warm_caches() -> None:
+    try:
+        tickers = sorted(set(SEED_COMPANIES.keys()) | _POPULAR_HEALTHCARE)
+        # getCompany fills the EDGAR + Twelve Data profile caches; getPipeline
+        # fills the CT.gov cache. Fan-out is OK — EDGAR rate limits are 10
+        # req/s and we have ~50 tickers total.
+        async def _one(ticker: str) -> None:
+            try:
+                await get_edgar_company_data(ticker)
+            except Exception:
+                pass
+
+        await asyncio.gather(*(_one(t) for t in tickers), return_exceptions=True)
+        print(f"[bioradar] cache warm-up complete for {len(tickers)} tickers")
+    except Exception as exc:
+        print(f"[bioradar] cache warm-up failed: {exc}")
+
+
+@app.on_event("startup")
+async def _on_startup() -> None:
+    # Fire-and-forget — don't block the server becoming healthy.
+    asyncio.create_task(_warm_caches())
+
+
+# ---------------------------------------------------------------------------
 # Routes — basic
 # ---------------------------------------------------------------------------
 @app.get("/")
@@ -889,11 +985,16 @@ async def search_tickers(q: str, limit: int = 8) -> dict:
     if not q:
         return {"query": q, "results": []}
 
+    # Overfetch modestly so the healthcare filter has enough to choose from
+    # without exploding the per-keystroke fan-out. 1.5x is the sweet spot —
+    # enough slack that filter misses don't drop the result count, few enough
+    # candidates that classification stays snappy.
+    overfetch = max(int(limit * 1.5), limit + 2)
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             r = await client.get(
                 "https://api.twelvedata.com/symbol_search",
-                params={"symbol": q, "outputsize": min(max(limit * 3, 1), 30)},
+                params={"symbol": q, "outputsize": min(overfetch, 15)},
             )
         if r.status_code != 200:
             return {
@@ -940,22 +1041,35 @@ async def search_tickers(q: str, limit: int = 8) -> dict:
     if not ordered:
         return {"query": q, "results": []}
 
-    seed_set = set(SEED_COMPANIES.keys())
+    # Fast-path: tickers we already know are healthcare (seeded + the popular
+    # biotech universe we curate across Screener/Pipeline/Heatmap/Catalysts)
+    # skip the EDGAR classify. That collapses the common case — users typing
+    # a familiar ticker — to a zero-network-hop filter.
+    known_healthcare = set(SEED_COMPANIES.keys()) | _POPULAR_HEALTHCARE
+
+    to_classify = [hit for hit in ordered if hit["symbol"] not in known_healthcare]
+    # Early-exit once we've filled the limit so we never pay for more
+    # classifications than we can actually surface.
+    # (Twelve Data sorts by relevance, so the leading results are what we want.)
     checks = await asyncio.gather(
         *[
             is_healthcare_ticker(
                 hit["symbol"],
-                seed_tickers=seed_set,
+                seed_tickers=set(SEED_COMPANIES.keys()),
                 edgar_lookup=get_edgar_company_data,
             )
-            for hit in ordered
+            for hit in to_classify
         ],
         return_exceptions=True,
     )
+    classify_map = {
+        hit["symbol"]: (ok is True)
+        for hit, ok in zip(to_classify, checks)
+    }
     filtered = [
         hit
-        for hit, ok in zip(ordered, checks)
-        if ok is True  # treat exceptions / False as "hide"
+        for hit in ordered
+        if hit["symbol"] in known_healthcare or classify_map.get(hit["symbol"], False)
     ]
     return {"query": q, "results": filtered[:limit]}
 

@@ -27,6 +27,17 @@ import {
 
 type Props = {
   ticker: string;
+  /**
+   * Server-fetched data for the default period. When all four are provided
+   * the component renders immediately on mount without a client fetch.
+   * Toggling the period on the client still triggers re-fetches.
+   */
+  initialPrices?: PricePoint[];
+  initialCatalysts?: CatalystEvent[];
+  initialEarnings?: EarningsEvent[];
+  initialTrials?: Trial[];
+  /** The period that `initialPrices` covers (defaults to "2y"). */
+  initialPeriod?: string;
 };
 
 const PERIODS: { label: string; value: string }[] = [
@@ -45,18 +56,46 @@ type FeedItem =
   | { kind: "catalyst"; date: string; event: CatalystEvent }
   | { kind: "earnings"; date: string; event: EarningsEvent };
 
-export default function StockChart({ ticker }: Props) {
-  const [period, setPeriod] = useState("2y");
-  const [prices, setPrices] = useState<PricePoint[]>([]);
-  const [catalysts, setCatalysts] = useState<CatalystEvent[]>([]);
-  const [earnings, setEarnings] = useState<EarningsEvent[]>([]);
-  const [trials, setTrials] = useState<Trial[]>([]);
-  const [loading, setLoading] = useState(true);
+export default function StockChart({
+  ticker,
+  initialPrices,
+  initialCatalysts,
+  initialEarnings,
+  initialTrials,
+  initialPeriod = "2y",
+}: Props) {
+  // If the parent handed us server-fetched data, seed from it and skip the
+  // initial client fetch. Period changes still trigger re-fetches.
+  const hasSeed =
+    initialPrices !== undefined &&
+    initialCatalysts !== undefined &&
+    initialEarnings !== undefined &&
+    initialTrials !== undefined;
+
+  const [period, setPeriod] = useState(initialPeriod);
+  const [prices, setPrices] = useState<PricePoint[]>(initialPrices ?? []);
+  const [catalysts, setCatalysts] = useState<CatalystEvent[]>(
+    initialCatalysts ?? [],
+  );
+  const [earnings, setEarnings] = useState<EarningsEvent[]>(
+    initialEarnings ?? [],
+  );
+  const [trials, setTrials] = useState<Trial[]>(initialTrials ?? []);
+  const [loading, setLoading] = useState(!hasSeed);
   const [error, setError] = useState<string | null>(null);
   const [hoverDate, setHoverDate] = useState<string | null>(null);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  // Used to skip the first-mount client fetch when we have server seeds.
+  const [firstMount, setFirstMount] = useState(true);
 
   useEffect(() => {
+    // Skip the initial fetch when server data was supplied AND the period
+    // matches what we were seeded with. The user switching 2Y -> 5Y will
+    // flip `firstMount` false and fall through to the normal fetch.
+    if (hasSeed && firstMount && period === initialPeriod) {
+      setFirstMount(false);
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -81,10 +120,16 @@ export default function StockChart({ ticker }: Props) {
         setEarnings(e?.events ?? []);
         setTrials(pl?.trials ?? []);
       })
-      .finally(() => !cancelled && setLoading(false));
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+          setFirstMount(false);
+        }
+      });
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticker, period]);
 
   const firstDate = prices.length > 0 ? prices[0].date : null;

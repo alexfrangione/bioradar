@@ -1,5 +1,19 @@
 import Link from "next/link";
-import { getCompany, getQuote, type Company, type Quote } from "@/lib/api";
+import {
+  getCatalysts,
+  getCompany,
+  getEarnings,
+  getPipeline,
+  getPrices,
+  getQuote,
+  type CatalystEvent,
+  type Company,
+  type EarningsEvent,
+  type PipelineResponse,
+  type PricePoint,
+  type Quote,
+  type Trial,
+} from "@/lib/api";
 import Pipeline from "@/components/Pipeline";
 import StockChart from "@/components/StockChart";
 import StarButton from "@/components/StarButton";
@@ -7,17 +21,28 @@ import Valuation from "@/components/Valuation";
 import PeerComparison from "@/components/PeerComparison";
 import SiteNav from "@/components/SiteNav";
 
+// Matches StockChart's default period. Pulled up here so the one server-side
+// fetch and the client component stay in lockstep.
+const DEFAULT_CHART_PERIOD = "2y";
+
 // Next.js 14 dynamic route — `params.ticker` from the URL.
 type Params = { ticker: string };
 
 export default async function CompanyPage({ params }: { params: Params }) {
   const ticker = params.ticker.toUpperCase();
-  // Fetch company + quote in parallel. Quote can be null if Twelve Data
-  // errors or is rate-limited; header falls back gracefully.
-  const [company, quote] = await Promise.all([
-    getCompany(ticker),
-    getQuote(ticker),
-  ]);
+  // Fetch everything in parallel server-side so the initial HTML already
+  // contains the data. Kills the client-side waterfall: before, the browser
+  // hydrated and THEN Pipeline + StockChart each fired their own fetches
+  // (six round trips, one duplicate). Now it's one request wave.
+  const [company, quote, pipeline, prices, catalysts, earnings] =
+    await Promise.all([
+      getCompany(ticker),
+      getQuote(ticker),
+      getPipeline(ticker, 100),
+      getPrices(ticker, DEFAULT_CHART_PERIOD),
+      getCatalysts(ticker),
+      getEarnings(ticker),
+    ]);
 
   return (
     <main className="min-h-screen">
@@ -32,7 +57,15 @@ export default async function CompanyPage({ params }: { params: Params }) {
 
       {/* Real company data */}
       {company && !company.placeholder && (
-        <CompanyHeader company={company} quote={quote} />
+        <CompanyHeader
+          company={company}
+          quote={quote}
+          pipeline={pipeline}
+          prices={prices?.points ?? []}
+          catalysts={catalysts?.events ?? []}
+          earnings={earnings?.events ?? []}
+          trials={pipeline?.trials ?? []}
+        />
       )}
     </main>
   );
@@ -43,9 +76,19 @@ export default async function CompanyPage({ params }: { params: Params }) {
 function CompanyHeader({
   company,
   quote,
+  pipeline,
+  prices,
+  catalysts,
+  earnings,
+  trials,
 }: {
   company: Company;
   quote: Quote | null;
+  pipeline: PipelineResponse | null;
+  prices: PricePoint[];
+  catalysts: CatalystEvent[];
+  earnings: EarningsEvent[];
+  trials: Trial[];
 }) {
   const hasPrice = quote && !quote.error && quote.price != null;
   const changeDir =
@@ -162,8 +205,15 @@ function CompanyHeader({
       )}
 
       <div className="p-8 space-y-6">
-        <StockChart ticker={company.ticker} />
-        <Pipeline ticker={company.ticker} />
+        <StockChart
+          ticker={company.ticker}
+          initialPrices={prices}
+          initialCatalysts={catalysts}
+          initialEarnings={earnings}
+          initialTrials={trials}
+          initialPeriod={DEFAULT_CHART_PERIOD}
+        />
+        <Pipeline ticker={company.ticker} initialData={pipeline} />
         <Valuation company={company} quote={quote} />
         <PeerComparison ticker={company.ticker} />
       </div>
