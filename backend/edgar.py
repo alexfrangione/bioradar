@@ -612,11 +612,16 @@ _CATALYST_PATTERNS: list[tuple[tuple[str, ...], str, str, str]] = [
 
 def _classify_8k(description: str, items: str) -> tuple[str, str, str] | None:
     """Classify an 8-K from its description + items. Returns
-    (type, impact, title_prefix) or None if nothing interesting matched."""
+    (type, impact, title_prefix) or None if nothing interesting matched.
+
+    Requires a real keyword hit in the description. We deliberately do NOT
+    fall back on item 1.01 alone — "Material Agreement" covers financing,
+    employment contracts, leases, and indemnification on top of actual
+    licensing deals, so the item-only signal is too noisy. If the filer
+    didn't put a meaningful description on the document, we'd rather drop
+    the event than emit a generic "Deal" placeholder.
+    """
     if not description:
-        # Fall through to item-only classification for empty descriptions.
-        if "1.01" in items:
-            return ("licensing", "medium", "Deal")
         return None
 
     d = description.lower()
@@ -624,10 +629,8 @@ def _classify_8k(description: str, items: str) -> tuple[str, str, str] | None:
         if any(kw in d for kw in keywords):
             return (ctype, impact, prefix)
 
-    # Fallback on items — these are at least filtered by the caller to the
-    # biotech-relevant set, so emit a low-impact generic event.
-    if "1.01" in items:
-        return ("licensing", "medium", "Deal")
+    # No keyword match + generic or missing description → not a catalyst
+    # we can speak confidently about. Skip rather than emit noise.
     return None
 
 

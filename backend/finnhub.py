@@ -207,11 +207,19 @@ async def _fetch_news(
     error so callers can degrade gracefully."""
     key = _api_key()
     if not key:
+        print(
+            f"[bioradar][finnhub] {ticker}: FINNHUB_API_KEY not set — skipping. "
+            f"Add it to backend/.env and restart uvicorn."
+        )
         return []
 
     cache_key = f"{ticker}|{from_date}|{to_date}"
     cached = _news_cache.get(cache_key)
     if cached and (_now() - cached[0]) < _CACHE_TTL:
+        print(
+            f"[bioradar][finnhub] {ticker}: cache hit "
+            f"({len(cached[1])} articles, window {from_date}→{to_date})"
+        )
         return cached[1]
 
     url = "https://finnhub.io/api/v1/company-news"
@@ -225,13 +233,28 @@ async def _fetch_news(
         async with httpx.AsyncClient(timeout=15.0) as c:
             r = await c.get(url, params=params)
         if r.status_code != 200:
+            # Common failures: 401 (bad key), 403 (suspended), 429 (rate limit).
+            body_preview = r.text[:200] if r.text else ""
+            print(
+                f"[bioradar][finnhub] {ticker}: HTTP {r.status_code} "
+                f"(window {from_date}→{to_date}). body: {body_preview!r}"
+            )
             return []
         data = r.json()
         if not isinstance(data, list):
+            print(
+                f"[bioradar][finnhub] {ticker}: unexpected response shape "
+                f"(expected list, got {type(data).__name__})"
+            )
             return []
+        print(
+            f"[bioradar][finnhub] {ticker}: fetched {len(data)} articles "
+            f"(window {from_date}→{to_date})"
+        )
         _news_cache[cache_key] = (_now(), data)
         return data
-    except httpx.HTTPError:
+    except httpx.HTTPError as exc:
+        print(f"[bioradar][finnhub] {ticker}: HTTP error — {exc}")
         return []
 
 
@@ -323,6 +346,12 @@ async def get_finnhub_catalysts(
     deduped.sort(key=lambda e: e["date"])
     if limit and len(deduped) > limit:
         deduped = deduped[-limit:]
+
+    if raw:
+        print(
+            f"[bioradar][finnhub] {ticker}: classified {len(out)}/{len(raw)} "
+            f"articles, {len(deduped)} after dedup"
+        )
     return deduped
 
 
