@@ -3,6 +3,8 @@ import { getCompany, getQuote, type Company, type Quote } from "@/lib/api";
 import Pipeline from "@/components/Pipeline";
 import StockChart from "@/components/StockChart";
 import StarButton from "@/components/StarButton";
+import Valuation from "@/components/Valuation";
+import PeerComparison from "@/components/PeerComparison";
 
 // Next.js 14 dynamic route — `params.ticker` from the URL.
 type Params = { ticker: string };
@@ -30,6 +32,12 @@ export default async function CompanyPage({ params }: { params: Params }) {
           BioRadar
         </Link>
         <div className="flex items-center gap-6">
+          <Link
+            href="/catalysts"
+            className="text-text-dim hover:text-text text-[13px]"
+          >
+            Calendar
+          </Link>
           <Link
             href="/watchlist"
             className="text-text-dim hover:text-text text-[13px]"
@@ -185,6 +193,8 @@ function CompanyHeader({
       <div className="p-8 space-y-6">
         <StockChart ticker={company.ticker} />
         <Pipeline ticker={company.ticker} />
+        <Valuation company={company} quote={quote} />
+        <PeerComparison ticker={company.ticker} />
       </div>
     </>
   );

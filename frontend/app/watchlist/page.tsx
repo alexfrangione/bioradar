@@ -108,6 +108,12 @@ export default function WatchlistPage() {
           >
             Search
           </Link>
+          <Link
+            href="/catalysts"
+            className="text-text-dim hover:text-text text-[13px]"
+          >
+            Calendar
+          </Link>
         </div>
       </nav>
 

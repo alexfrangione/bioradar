@@ -105,6 +105,12 @@ export default function LandingPage() {
             Methodology
           </a>
           <Link
+            href="/catalysts"
+            className="text-text-dim hover:text-text text-[13px] cursor-pointer"
+          >
+            Calendar
+          </Link>
+          <Link
             href="/watchlist"
             className="text-text-dim hover:text-text text-[13px] cursor-pointer"
           >
