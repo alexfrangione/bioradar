@@ -32,6 +32,7 @@ type TimelineEvent = {
 };
 
 type Scope = "week" | "month" | "quarter";
+type Universe = "popular" | "watchlist";
 type Tier = "a" | "b" | "c" | "d";
 
 const SCOPE_DAYS: Record<Scope, number> = {
@@ -45,6 +46,28 @@ const SCOPE_LABEL: Record<Scope, string> = {
   month: "This month",
   quarter: "This quarter",
 };
+
+// Curated universe for the default "Popular biotech" view so the calendar is
+// useful out-of-the-box — no empty state for first-time visitors. Covers the
+// liquid mid/large-cap biotechs with the most catalyst density. The watchlist
+// view still shows whatever the user has starred.
+const POPULAR_TICKERS = [
+  "MRNA",
+  "VRTX",
+  "CRSP",
+  "BEAM",
+  "SRPT",
+  "NTLA",
+  "REGN",
+  "BNTX",
+  "EDIT",
+  "BIIB",
+  "ALNY",
+  "MDGL",
+  "ARWR",
+  "INSM",
+  "GILD",
+];
 
 // ---------------------------------------------------------------------------
 // Tiering
@@ -154,20 +177,28 @@ const BORDER_CLASS: Record<Palette, string> = {
 
 export default function CatalystsPage() {
   const [mounted, setMounted] = useState(false);
-  const [tickers, setTickers] = useState<string[]>([]);
+  const [watchlist, setWatchlist] = useState<string[]>([]);
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [scope, setScope] = useState<Scope>("week");
+  const [universe, setUniverse] = useState<Universe>("popular");
 
   // Hydrate watchlist once mounted; subscribe so stars on other tabs refresh.
   useEffect(() => {
     setMounted(true);
-    setTickers(getWatchlist());
-    return subscribeWatchlist((next) => setTickers(next));
+    setWatchlist(getWatchlist());
+    return subscribeWatchlist((next) => setWatchlist(next));
   }, []);
 
-  // Fan-out fetch across every watchlist ticker. We refetch when the set
-  // changes — data is cheap and the list is small.
+  // Resolve universe → tickers. Popular is a curated constant so the page
+  // always has content; watchlist reflects whatever the user has starred.
+  const tickers = useMemo(
+    () => (universe === "popular" ? POPULAR_TICKERS : watchlist),
+    [universe, watchlist],
+  );
+
+  // Fan-out fetch across every ticker in the active universe. We refetch
+  // when the set changes — data is cheap and the list is small.
   useEffect(() => {
     if (!mounted) return;
     if (tickers.length === 0) {
@@ -306,7 +337,8 @@ export default function CatalystsPage() {
                   {tickers.length > 0 && (
                     <>
                       across {tickers.length}{" "}
-                      {tickers.length === 1 ? "ticker" : "tickers"} ·{" "}
+                      {tickers.length === 1 ? "ticker" : "tickers"}
+                      {universe === "popular" ? " (popular biotech)" : ""} ·{" "}
                     </>
                   )}
                   {dateRange}
@@ -317,7 +349,15 @@ export default function CatalystsPage() {
             </p>
           </div>
 
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center flex-wrap">
+            <ToggleGroup<Universe>
+              value={universe}
+              onChange={setUniverse}
+              options={[
+                { v: "popular", label: "Popular biotech" },
+                { v: "watchlist", label: "My watchlist" },
+              ]}
+            />
             <ToggleGroup<Scope>
               value={scope}
               onChange={setScope}
@@ -331,7 +371,7 @@ export default function CatalystsPage() {
         </div>
 
         {/* ==================== BODY ==================== */}
-        {!mounted ? null : tickers.length === 0 ? (
+        {!mounted ? null : universe === "watchlist" && watchlist.length === 0 ? (
           <EmptyState kind="no-watchlist" />
         ) : loading && events.length === 0 ? (
           <div className="text-sm text-text-dim py-10">Loading calendar…</div>
