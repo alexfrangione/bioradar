@@ -422,13 +422,21 @@ async def get_pipeline(ticker: str, limit: int = 25) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Price history — yfinance
+# Price history
 # ---------------------------------------------------------------------------
+_PERIOD_DAYS = {
+    "1mo": 31,
+    "3mo": 92,
+    "6mo": 184,
+    "1y": 366,
+    "2y": 732,
+    "5y": 1830,
+    "max": 10_000,
+}
+
+
 def _yf_session():
-    """
-    Build a browser-impersonating session so Yahoo doesn't rate-limit us.
-    Falls back to no session if curl_cffi isn't installed yet.
-    """
+    """Browser-impersonating session so Yahoo is less likely to block us."""
     try:
         from curl_cffi import requests as curl_requests  # type: ignore
 
@@ -437,32 +445,16 @@ def _yf_session():
         return None
 
 
-@app.get("/api/company/{ticker}/prices")
-def get_prices(ticker: str, period: str = "2y") -> dict:
-    """
-    Returns daily close prices for the ticker.
-    `period` is any yfinance period string: 1mo, 3mo, 6mo, 1y, 2y, 5y, max.
-    """
-    ticker = ticker.upper().strip()
-
+def _fetch_yfinance(ticker: str, period: str) -> list[dict]:
+    """Primary source — works great on residential IPs, blocked on cloud IPs."""
     try:
         import yfinance as yf  # type: ignore
     except ImportError:
-        raise HTTPException(
-            status_code=500,
-            detail="yfinance not installed on the server.",
-        )
-
-    allowed = {"1mo", "3mo", "6mo", "1y", "2y", "5y", "max"}
-    if period not in allowed:
-        period = "2y"
+        return []
 
     session = _yf_session()
-
     df = None
-    last_err: str | None = None
 
-    # Attempt 1: yf.download — usually the most reliable entry point.
     try:
         kwargs: dict[str, Any] = {
             "tickers": ticker,
@@ -474,33 +466,27 @@ def get_prices(ticker: str, period: str = "2y") -> dict:
         if session is not None:
             kwargs["session"] = session
         df = yf.download(**kwargs)
-    except Exception as exc:  # noqa: BLE001
-        last_err = f"yf.download: {exc}"
+    except Exception:  # noqa: BLE001
+        df = None
 
-    # Attempt 2: fall back to Ticker.history
     if df is None or df.empty:
         try:
-            t = yf.Ticker(ticker, session=session) if session else yf.Ticker(ticker)
+            t = (
+                yf.Ticker(ticker, session=session)
+                if session
+                else yf.Ticker(ticker)
+            )
             df = t.history(period=period, auto_adjust=True)
-        except Exception as exc:  # noqa: BLE001
-            last_err = f"Ticker.history: {exc}"
+        except Exception:  # noqa: BLE001
+            return []
 
     if df is None or df.empty:
-        return {
-            "ticker": ticker,
-            "period": period,
-            "count": 0,
-            "points": [],
-            "error": last_err
-            or "No data returned from yfinance. Yahoo may be rate-limiting.",
-        }
+        return []
 
-    # yf.download with a single ticker returns flat columns; with multi-ticker
-    # it returns a MultiIndex. We always pass one ticker, so flatten defensively.
     if hasattr(df.columns, "nlevels") and df.columns.nlevels > 1:
         df.columns = df.columns.get_level_values(0)
 
-    points = []
+    points: list[dict] = []
     for idx, row in df.iterrows():
         close_val = row.get("Close")
         if close_val is None:
@@ -509,7 +495,7 @@ def get_prices(ticker: str, period: str = "2y") -> dict:
             close_f = float(close_val)
         except (TypeError, ValueError):
             continue
-        if close_f != close_f:  # NaN check
+        if close_f != close_f:  # NaN
             continue
         vol = row.get("Volume")
         try:
@@ -523,10 +509,104 @@ def get_prices(ticker: str, period: str = "2y") -> dict:
                 "volume": vol_i,
             }
         )
+    return points
+
+
+async def _fetch_stooq(ticker: str, period: str) -> list[dict]:
+    """
+    Fallback source — Stooq publishes free daily CSV with no API key and no
+    cloud-IP blocking. Format: Date,Open,High,Low,Close,Volume.
+    """
+    days = _PERIOD_DAYS.get(period, 732)
+    end = datetime.utcnow().date()
+    start = end - timedelta(days=days)
+    url = (
+        f"https://stooq.com/q/d/l/?s={ticker.lower()}.us&i=d"
+        f"&d1={start.strftime('%Y%m%d')}&d2={end.strftime('%Y%m%d')}"
+    )
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.get(url)
+    except httpx.HTTPError:
+        return []
+
+    if r.status_code != 200 or not r.text:
+        return []
+
+    text = r.text.strip()
+    # Stooq returns "No data" (short body) when it doesn't know the ticker.
+    if "no data" in text[:100].lower():
+        return []
+
+    lines = text.split("\n")
+    if len(lines) < 2:
+        return []
+
+    points: list[dict] = []
+    for line in lines[1:]:
+        parts = line.strip().split(",")
+        if len(parts) < 6:
+            continue
+        try:
+            date_str = parts[0]
+            # Accept either YYYY-MM-DD or YYYYMMDD
+            if len(date_str) == 8 and date_str.isdigit():
+                date_str = (
+                    f"{date_str[0:4]}-{date_str[4:6]}-{date_str[6:8]}"
+                )
+            close = float(parts[4])
+        except (ValueError, IndexError):
+            continue
+        try:
+            volume = int(parts[5]) if parts[5] and parts[5] != "-" else 0
+        except (ValueError, IndexError):
+            volume = 0
+        points.append(
+            {"date": date_str, "close": round(close, 2), "volume": volume}
+        )
+
+    return points
+
+
+@app.get("/api/company/{ticker}/prices")
+async def get_prices(ticker: str, period: str = "2y") -> dict:
+    """
+    Returns daily close prices for the ticker.
+    Tries yfinance first (fast, local dev), falls back to Stooq (works from
+    cloud IPs where Yahoo blocks us).
+    """
+    ticker = ticker.upper().strip()
+    allowed = {"1mo", "3mo", "6mo", "1y", "2y", "5y", "max"}
+    if period not in allowed:
+        period = "2y"
+
+    # Run sync yfinance in a threadpool so we don't block the event loop.
+    import asyncio
+
+    points = await asyncio.to_thread(_fetch_yfinance, ticker, period)
+    source = "yfinance"
+
+    if not points:
+        points = await _fetch_stooq(ticker, period)
+        source = "stooq"
+
+    if not points:
+        return {
+            "ticker": ticker,
+            "period": period,
+            "count": 0,
+            "points": [],
+            "error": (
+                "No data available from yfinance or Stooq. Yahoo may be "
+                "rate-limiting and the ticker may not be on Stooq."
+            ),
+        }
 
     return {
         "ticker": ticker,
         "period": period,
+        "source": source,
         "count": len(points),
         "points": points,
     }
