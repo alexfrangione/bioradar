@@ -512,79 +512,75 @@ def _fetch_yfinance(ticker: str, period: str) -> list[dict]:
     return points
 
 
-_BROWSER_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/122.0.0.0 Safari/537.36"
-    ),
-    "Accept": "text/csv,text/plain,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-}
-
-
-async def _fetch_stooq(ticker: str, period: str) -> tuple[list[dict], str | None]:
+async def _fetch_twelvedata(
+    ticker: str, period: str
+) -> tuple[list[dict], str | None]:
     """
-    Fallback source — Stooq publishes free daily CSV with no API key.
+    Fallback source — Twelve Data. Free tier: 800 req/day, 8/min.
+    Requires TWELVE_DATA_API_KEY env var.
     Returns (points, error_detail). error_detail is None on success.
     """
+    api_key = os.getenv("TWELVE_DATA_API_KEY")
+    if not api_key:
+        return [], (
+            "twelvedata: no API key configured "
+            "(set TWELVE_DATA_API_KEY env var on the server)"
+        )
+
+    # Roughly 252 trading days per year. Buffer by requesting more.
     days = _PERIOD_DAYS.get(period, 732)
-    end = datetime.utcnow().date()
-    start = end - timedelta(days=days)
-    url = (
-        f"https://stooq.com/q/d/l/?s={ticker.lower()}.us&i=d"
-        f"&d1={start.strftime('%Y%m%d')}&d2={end.strftime('%Y%m%d')}"
-    )
+    outputsize = min(int(days * 0.72) + 10, 5000)
+
+    url = "https://api.twelvedata.com/time_series"
+    params = {
+        "symbol": ticker,
+        "interval": "1day",
+        "outputsize": str(outputsize),
+        "apikey": api_key,
+        "format": "JSON",
+    }
 
     try:
-        async with httpx.AsyncClient(
-            timeout=20.0, headers=_BROWSER_HEADERS, follow_redirects=True
-        ) as client:
-            r = await client.get(url)
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            r = await client.get(url, params=params)
     except httpx.HTTPError as exc:
-        return [], f"stooq network error: {exc}"
+        return [], f"twelvedata network error: {exc}"
 
     if r.status_code != 200:
-        return [], f"stooq HTTP {r.status_code}"
-    if not r.text:
-        return [], "stooq empty response body"
+        return [], f"twelvedata HTTP {r.status_code}"
 
-    text = r.text.strip()
-    preview = text[:120].replace("\n", " ").replace("\r", " ")
+    try:
+        data = r.json()
+    except Exception:  # noqa: BLE001
+        return [], f"twelvedata bad JSON (preview: {r.text[:120]!r})"
 
-    if "no data" in text[:200].lower():
-        return [], f"stooq says no data (preview: {preview!r})"
+    if isinstance(data, dict) and data.get("status") == "error":
+        return [], f"twelvedata error: {data.get('message', 'unknown')}"
 
-    lines = text.split("\n")
-    if len(lines) < 2:
-        return [], f"stooq response too short (preview: {preview!r})"
+    values = data.get("values") if isinstance(data, dict) else None
+    if not values:
+        return [], "twelvedata returned no values"
 
-    # First line should be the header "Date,Open,High,Low,Close,Volume"
-    if not lines[0].lower().startswith("date"):
-        return [], f"stooq unexpected format (preview: {preview!r})"
-
+    # Twelve Data returns newest-first; reverse so the chart gets oldest-first.
     points: list[dict] = []
-    for line in lines[1:]:
-        parts = line.strip().split(",")
-        if len(parts) < 6:
+    for v in reversed(values):
+        try:
+            date_str = str(v.get("datetime", ""))[:10]
+            if not date_str:
+                continue
+            close = float(v["close"])
+        except (ValueError, KeyError, TypeError):
             continue
         try:
-            date_str = parts[0]
-            if len(date_str) == 8 and date_str.isdigit():
-                date_str = f"{date_str[0:4]}-{date_str[4:6]}-{date_str[6:8]}"
-            close = float(parts[4])
-        except (ValueError, IndexError):
-            continue
-        try:
-            volume = int(parts[5]) if parts[5] and parts[5] != "-" else 0
-        except (ValueError, IndexError):
+            volume = int(float(v.get("volume", 0) or 0))
+        except (ValueError, TypeError):
             volume = 0
         points.append(
             {"date": date_str, "close": round(close, 2), "volume": volume}
         )
 
     if not points:
-        return [], f"stooq parsed zero rows (preview: {preview!r})"
+        return [], "twelvedata parsed zero rows"
     return points, None
 
 
@@ -605,11 +601,11 @@ async def get_prices(ticker: str, period: str = "2y") -> dict:
 
     points = await asyncio.to_thread(_fetch_yfinance, ticker, period)
     source = "yfinance"
-    stooq_err: str | None = None
+    fallback_err: str | None = None
 
     if not points:
-        points, stooq_err = await _fetch_stooq(ticker, period)
-        source = "stooq"
+        points, fallback_err = await _fetch_twelvedata(ticker, period)
+        source = "twelvedata"
 
     if not points:
         return {
@@ -617,8 +613,7 @@ async def get_prices(ticker: str, period: str = "2y") -> dict:
             "period": period,
             "count": 0,
             "points": [],
-            "error": stooq_err
-            or "No data available from yfinance or Stooq.",
+            "error": fallback_err or "No data available from any source.",
         }
 
     return {
