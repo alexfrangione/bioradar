@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BioTicker — shortlist (3 wordmarks × 2 type pairings)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-page: #08090a;
+    --bg-app: #0d1117;
+    --bg-elev: #161b22;
+    --bg-elev2: #1c2128;
+    --border: #30363d;
+    --border-subtle: #21262d;
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --text-dimmer: #6e7681;
+    --accent-green: #3fb950;
+    --accent-red: #f85149;
+    --accent-amber: #d29922;
+    --accent-blue: #58a6ff;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    background: var(--bg-page);
+    color: var(--text);
+    margin: 0;
+    font-family: "Inter", system-ui, sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv11";
+  }
+  .wrap { max-width: 1300px; margin: 0 auto; padding: 48px 24px 96px; }
+  h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 8px; }
+  .subtitle { color: var(--text-dim); margin: 0 0 40px; font-size: 14px; }
+  .legend {
+    display: flex; gap: 24px; flex-wrap: wrap;
+    background: var(--bg-app); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 20px; margin-bottom: 40px;
+    font-size: 13px;
+  }
+  .legend strong { color: var(--text); font-weight: 600; }
+  .legend span { color: var(--text-dim); }
+
+  h2 {
+    font-size: 12px; font-weight: 600; color: var(--text-dimmer);
+    text-transform: uppercase; letter-spacing: 0.1em;
+    margin: 48px 0 12px;
+  }
+
+  /* Combo card: full-width row */
+  .combo {
+    background: var(--bg-app);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .combo-label {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 20px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .combo-label .pill {
+    padding: 2px 8px; border-radius: 4px;
+    background: var(--bg-elev2); color: var(--text);
+    font-size: 10px; letter-spacing: 0.06em;
+  }
+  .combo-body { padding: 24px; }
+
+  /* Nav bar */
+  .nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 20px;
+  }
+  .nav .links { display: flex; gap: 22px; font-size: 13.5px; font-weight: 500; }
+  .nav .links a { color: var(--text-dim); text-decoration: none; }
+  .nav .btn {
+    font-size: 13px; font-weight: 500; color: var(--bg-page);
+    background: var(--accent-green);
+    padding: 6px 12px; border-radius: 6px;
+  }
+
+  /* Company card sample */
+  .sample-card {
+    background: var(--bg-elev);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 22px 24px;
+  }
+  .sample-card .ticker {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px; color: var(--text-dimmer); letter-spacing: 0.12em;
+    margin-bottom: 4px;
+  }
+  .sample-card .name {
+    font-size: 22px; font-weight: 700; letter-spacing: -0.015em;
+    margin: 0 0 4px;
+  }
+  .sample-card .blurb {
+    font-size: 13px; color: var(--text-dim); line-height: 1.6;
+    margin: 0 0 18px; max-width: 560px;
+  }
+  .data {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+    padding: 14px 18px;
+    background: var(--bg-app);
+    border-radius: 8px;
+    border: 1px solid var(--border-subtle);
+  }
+  .data-item .label {
+    font-size: 10px; color: var(--text-dimmer);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    margin-bottom: 4px;
+  }
+  .data-item .value {
+    font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums;
+  }
+  .up { color: var(--accent-green); }
+  .down { color: var(--accent-red); }
+
+  /* ============== TYPE PAIRING A ============== */
+  .type-A .name, .type-A .blurb, .type-A .links a, .type-A .btn,
+  .type-A .sample-card .name, .type-A h3 { font-family: "Inter", sans-serif; }
+  .type-A .data-item .value { font-family: "JetBrains Mono", monospace; }
+
+  /* ============== TYPE PAIRING B ============== */
+  .type-B .name, .type-B .blurb, .type-B .links a, .type-B .btn,
+  .type-B .sample-card .name, .type-B h3 { font-family: "Geist", sans-serif; }
+  .type-B .data-item .value { font-family: "Geist Mono", monospace; }
+
+  /* ============== WORDMARK 1 — mono caps + tick ============== */
+  .w1-large, .w1-nav {
+    font-family: "JetBrains Mono", monospace;
+    font-weight: 700;
+    display: inline-flex; align-items: center; gap: 10px;
+  }
+  .w1-large { font-size: 30px; letter-spacing: 0.04em; }
+  .w1-nav   { font-size: 17px; letter-spacing: 0.04em; }
+  .w1-large .tick, .w1-nav .tick {
+    color: var(--accent-green);
+    font-family: "JetBrains Mono", monospace;
+    letter-spacing: 0;
+  }
+  .w1-large .tick { font-size: 15px; }
+  .w1-nav .tick { font-size: 11px; }
+
+  /* ============== WORDMARK 5 — lowercase + dot ============== */
+  .w5-large, .w5-nav {
+    font-family: "Geist", sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    text-transform: lowercase;
+  }
+  .w5-large { font-size: 32px; }
+  .w5-nav   { font-size: 19px; }
+  .w5-large .dot, .w5-nav .dot {
+    display: inline-block;
+    background: var(--accent-green);
+    border-radius: 50%;
+    vertical-align: middle;
+    margin-left: 2px;
+  }
+  .w5-large .dot { width: 8px; height: 8px; transform: translateY(-6px); }
+  .w5-nav .dot   { width: 6px; height: 6px; transform: translateY(-5px); }
+
+  /* ============== WORDMARK 6 — geometric mark + space grotesk ============== */
+  .w6-large, .w6-nav {
+    display: inline-flex; align-items: center; gap: 14px;
+    font-family: "Space Grotesk", sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .w6-large { font-size: 28px; }
+  .w6-nav   { font-size: 17px; }
+
+  /* Hero block above sample card */
+  .hero {
+    display: flex; align-items: center; justify-content: center;
+    background:
+      radial-gradient(ellipse 60% 80% at 50% 50%, rgba(63,185,80,0.06), transparent 75%),
+      var(--bg-app);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    min-height: 140px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>BioTicker — shortlist matchups</h1>
+    <p class="subtitle">All six combos of your shortlist, in realistic header + company-card context. Palette unchanged.</p>
+    <div class="legend">
+      <div><strong>Wordmarks</strong> &nbsp; <span>1 = mono caps · 5 = lowercase minimal · 6 = geometric mark</span></div>
+      <div><strong>Type</strong> &nbsp; <span>A = Inter + JetBrains Mono · B = Geist + Geist Mono</span></div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- ROW: WORDMARK 1 -->
+    <!-- ============================================ -->
+    <h2>Wordmark 1 — mono caps with ticker accent</h2>
+
+    <!-- 1 + A -->
+    <div class="combo type-A">
+      <div class="combo-label">
+        <span class="pill">1 + A</span> Mono caps wordmark · Inter body · JetBrains Mono data
+      </div>
+      <div class="combo-body">
+        <div class="hero"><div class="w1-large">BIOTICKER <span class="tick">▲ 2.4%</span></div></div>
+        <div class="nav">
+          <div class="w1-nav">BIOTICKER <span class="tick">▲</span></div>
+          <div class="links"><a>Watchlist</a><a>Calendar</a><a>Valuation</a><a>Peers</a></div>
+          <div class="btn">Sign in</div>
+        </div>
+        <div class="sample-card">
+          <div class="ticker">SRPT · NASDAQ · Cambridge, MA</div>
+          <h3 class="name">Sarepta Therapeutics</h3>
+          <p class="blurb">Genetic medicine company focused on Duchenne muscular dystrophy and other rare neuromuscular diseases. Three Phase 3 readouts expected in the next twelve months.</p>
+          <div class="data">
+            <div class="data-item"><div class="label">Price</div><div class="value down">$38.42</div></div>
+            <div class="data-item"><div class="label">Market Cap</div><div class="value">$3.67B</div></div>
+            <div class="data-item"><div class="label">Runway</div><div class="value">18 mo</div></div>
+            <div class="data-item"><div class="label">P/E TTM</div><div class="value">—</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1 + B -->
+    <div class="combo type-B">
+      <div class="combo-label">
+        <span class="pill">1 + B</span> Mono caps wordmark · Geist body · Geist Mono data
+      </div>
+      <div class="combo-body">
+        <div class="hero"><div class="w1-large">BIOTICKER <span class="tick">▲ 2.4%</span></div></div>
+        <div class="nav">
+          <div class="w1-nav">BIOTICKER <span class="tick">▲</span></div>
+          <div class="links"><a>Watchlist</a><a>Calendar</a><a>Valuation</a><a>Peers</a></div>
+          <div class="btn">Sign in</div>
+        </div>
+        <div class="sample-card">
+          <div class="ticker">SRPT · NASDAQ · Cambridge, MA</div>
+          <h3 class="name">Sarepta Therapeutics</h3>
+          <p class="blurb">Genetic medicine company focused on Duchenne muscular dystrophy and other rare neuromuscular diseases. Three Phase 3 readouts expected in the next twelve months.</p>
+          <div class="data">
+            <div class="data-item"><div class="label">Price</div><div class="value down">$38.42</div></div>
+            <div class="data-item"><div class="label">Market Cap</div><div class="value">$3.67B</div></div>
+            <div class="data-item"><div class="label">Runway</div><div class="value">18 mo</div></div>
+            <div class="data-item"><div class="label">P/E TTM</div><div class="value">—</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- ROW: WORDMARK 5 -->
+    <!-- ============================================ -->
+    <h2>Wordmark 5 — lowercase minimal with live-data dot</h2>
+
+    <!-- 5 + A -->
+    <div class="combo type-A">
+      <div class="combo-label">
+        <span class="pill">5 + A</span> Lowercase wordmark · Inter body · JetBrains Mono data
+      </div>
+      <div class="combo-body">
+        <div class="hero"><div class="w5-large">bioticker<span class="dot"></span></div></div>
+        <div class="nav">
+          <div class="w5-nav">bioticker<span class="dot"></span></div>
+          <div class="links"><a>Watchlist</a><a>Calendar</a><a>Valuation</a><a>Peers</a></div>
+          <div class="btn">Sign in</div>
+        </div>
+        <div class="sample-card">
+          <div class="ticker">SRPT · NASDAQ · Cambridge, MA</div>
+          <h3 class="name">Sarepta Therapeutics</h3>
+          <p class="blurb">Genetic medicine company focused on Duchenne muscular dystrophy and other rare neuromuscular diseases. Three Phase 3 readouts expected in the next twelve months.</p>
+          <div class="data">
+            <div class="data-item"><div class="label">Price</div><div class="value down">$38.42</div></div>
+            <div class="data-item"><div class="label">Market Cap</div><div class="value">$3.67B</div></div>
+            <div class="data-item"><div class="label">Runway</div><div class="value">18 mo</div></div>
+            <div class="data-item"><div class="label">P/E TTM</div><div class="value">—</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5 + B -->
+    <div class="combo type-B">
+      <div class="combo-label">
+        <span class="pill">5 + B</span> Lowercase wordmark · Geist body · Geist Mono data  (native pairing)
+      </div>
+      <div class="combo-body">
+        <div class="hero"><div class="w5-large">bioticker<span class="dot"></span></div></div>
+        <div class="nav">
+          <div class="w5-nav">bioticker<span class="dot"></span></div>
+          <div class="links"><a>Watchlist</a><a>Calendar</a><a>Valuation</a><a>Peers</a></div>
+          <div class="btn">Sign in</div>
+        </div>
+        <div class="sample-card">
+          <div class="ticker">SRPT · NASDAQ · Cambridge, MA</div>
+          <h3 class="name">Sarepta Therapeutics</h3>
+          <p class="blurb">Genetic medicine company focused on Duchenne muscular dystrophy and other rare neuromuscular diseases. Three Phase 3 readouts expected in the next twelve months.</p>
+          <div class="data">
+            <div class="data-item"><div class="label">Price</div><div class="value down">$38.42</div></div>
+            <div class="data-item"><div class="label">Market Cap</div><div class="value">$3.67B</div></div>
+            <div class="data-item"><div class="label">Runway</div><div class="value">18 mo</div></div>
+            <div class="data-item"><div class="label">P/E TTM</div><div class="value">—</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- ROW: WORDMARK 6 -->
+    <!-- ============================================ -->
+    <h2>Wordmark 6 — geometric chart mark + Space Grotesk</h2>
+
+    <!-- 6 + A -->
+    <div class="combo type-A">
+      <div class="combo-label">
+        <span class="pill">6 + A</span> Geometric mark wordmark · Inter body · JetBrains Mono data
+      </div>
+      <div class="combo-body">
+        <div class="hero">
+          <div class="w6-large">
+            <svg width="34" height="34" viewBox="0 0 32 32" fill="none">
+              <circle cx="16" cy="16" r="15" stroke="#3fb950" stroke-width="1.5"/>
+              <path d="M8 20 L13 14 L18 17 L24 9" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+              <circle cx="24" cy="9" r="2" fill="#3fb950"/>
+            </svg>
+            BioTicker
+          </div>
+        </div>
+        <div class="nav">
+          <div class="w6-nav">
+            <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
+              <circle cx="16" cy="16" r="15" stroke="#3fb950" stroke-width="1.5"/>
+              <path d="M8 20 L13 14 L18 17 L24 9" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+              <circle cx="24" cy="9" r="2" fill="#3fb950"/>
+            </svg>
+            BioTicker
+          </div>
+          <div class="links"><a>Watchlist</a><a>Calendar</a><a>Valuation</a><a>Peers</a></div>
+          <div class="btn">Sign in</div>
+        </div>
+        <div class="sample-card">
+          <div class="ticker">SRPT · NASDAQ · Cambridge, MA</div>
+          <h3 class="name">Sarepta Therapeutics</h3>
+          <p class="blurb">Genetic medicine company focused on Duchenne muscular dystrophy and other rare neuromuscular diseases. Three Phase 3 readouts expected in the next twelve months.</p>
+          <div class="data">
+            <div class="data-item"><div class="label">Price</div><div class="value down">$38.42</div></div>
+            <div class="data-item"><div class="label">Market Cap</div><div class="value">$3.67B</div></div>
+            <div class="data-item"><div class="label">Runway</div><div class="value">18 mo</div></div>
+            <div class="data-item"><div class="label">P/E TTM</div><div class="value">—</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6 + B -->
+    <div class="combo type-B">
+      <div class="combo-label">
+        <span class="pill">6 + B</span> Geometric mark wordmark · Geist body · Geist Mono data
+      </div>
+      <div class="combo-body">
+        <div class="hero">
+          <div class="w6-large">
+            <svg width="34" height="34" viewBox="0 0 32 32" fill="none">
+              <circle cx="16" cy="16" r="15" stroke="#3fb950" stroke-width="1.5"/>
+              <path d="M8 20 L13 14 L18 17 L24 9" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+              <circle cx="24" cy="9" r="2" fill="#3fb950"/>
+            </svg>
+            BioTicker
+          </div>
+        </div>
+        <div class="nav">
+          <div class="w6-nav">
+            <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
+              <circle cx="16" cy="16" r="15" stroke="#3fb950" stroke-width="1.5"/>
+              <path d="M8 20 L13 14 L18 17 L24 9" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+              <circle cx="24" cy="9" r="2" fill="#3fb950"/>
+            </svg>
+            BioTicker
+          </div>
+          <div class="links"><a>Watchlist</a><a>Calendar</a><a>Valuation</a><a>Peers</a></div>
+          <div class="btn">Sign in</div>
+        </div>
+        <div class="sample-card">
+          <div class="ticker">SRPT · NASDAQ · Cambridge, MA</div>
+          <h3 class="name">Sarepta Therapeutics</h3>
+          <p class="blurb">Genetic medicine company focused on Duchenne muscular dystrophy and other rare neuromuscular diseases. Three Phase 3 readouts expected in the next twelve months.</p>
+          <div class="data">
+            <div class="data-item"><div class="label">Price</div><div class="value down">$38.42</div></div>
+            <div class="data-item"><div class="label">Market Cap</div><div class="value">$3.67B</div></div>
+            <div class="data-item"><div class="label">Runway</div><div class="value">18 mo</div></div>
+            <div class="data-item"><div class="label">P/E TTM</div><div class="value">—</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

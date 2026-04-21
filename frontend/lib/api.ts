@@ -1,5 +1,5 @@
 /**
- * Thin API client for the BioRadar backend.
+ * Thin API client for the BioTicker backend.
  */
 
 const API_URL =

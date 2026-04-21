@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BioTicker — round 4</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-page: #08090a;
+    --bg-app: #0d1117;
+    --bg-elev: #161b22;
+    --bg-elev2: #1c2128;
+    --border: #30363d;
+    --border-subtle: #21262d;
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --text-dimmer: #6e7681;
+    --accent-green: #3fb950;
+    --accent-red: #f85149;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    background: var(--bg-page);
+    color: var(--text);
+    margin: 0;
+    font-family: "Geist", system-ui, sans-serif;
+  }
+  .wrap { max-width: 1300px; margin: 0 auto; padding: 48px 24px 96px; }
+  h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 8px; }
+  .subtitle { color: var(--text-dim); margin: 0 0 24px; font-size: 14px; max-width: 720px; line-height: 1.6; }
+
+  .leader {
+    background: var(--bg-app);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 22px;
+    margin-bottom: 48px;
+    display: flex; align-items: center; gap: 16px;
+  }
+  .leader-label {
+    font-family: "Geist Mono", monospace;
+    font-size: 10px; color: var(--text-dimmer);
+    text-transform: uppercase; letter-spacing: 0.12em;
+  }
+  .leader-mark {
+    font-family: "Geist", sans-serif;
+    font-weight: 600;
+    font-size: 22px;
+    letter-spacing: -0.04em;
+    text-transform: lowercase;
+  }
+  .leader-mark .dot {
+    display: inline-block; width: 7px; height: 7px;
+    background: var(--accent-green); border-radius: 50%;
+    vertical-align: middle; margin-left: 2px; transform: translateY(-5px);
+  }
+
+  h2 {
+    font-size: 12px; font-weight: 600; color: var(--text-dimmer);
+    text-transform: uppercase; letter-spacing: 0.1em;
+    margin: 40px 0 12px;
+  }
+
+  .combo {
+    background: var(--bg-app);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .combo-label {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 20px;
+    font-family: "Geist Mono", monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .combo-label .pill {
+    padding: 2px 8px; border-radius: 4px;
+    background: var(--bg-elev2); color: var(--text);
+    font-size: 10px; letter-spacing: 0.06em;
+  }
+  .combo-body { padding: 24px; }
+  .notes {
+    color: var(--text-dim); font-size: 13px; line-height: 1.6;
+    margin: 16px 0 0; padding: 16px 0 0;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .hero {
+    display: flex; align-items: center; justify-content: center;
+    background:
+      radial-gradient(ellipse 60% 80% at 50% 50%, rgba(63,185,80,0.06), transparent 75%),
+      var(--bg-page);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    min-height: 160px;
+    padding: 24px;
+    margin-bottom: 18px;
+  }
+
+  .nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  .nav .links { display: flex; gap: 22px; font-size: 13.5px; font-weight: 500; }
+  .nav .links a { color: var(--text-dim); text-decoration: none; }
+  .nav .btn {
+    font-size: 13px; font-weight: 500; color: var(--bg-page);
+    background: var(--accent-green);
+    padding: 6px 12px; border-radius: 6px;
+  }
+
+  .mark-large, .mark-nav {
+    font-family: "Geist", sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    text-transform: lowercase;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+  }
+  .mark-large { font-size: 40px; }
+  .mark-nav   { font-size: 20px; }
+
+  .acc-lg { display: inline-block; vertical-align: middle; margin-left: 4px; transform: translateY(-8px); }
+  .acc-sm { display: inline-block; vertical-align: middle; margin-left: 3px; transform: translateY(-5px); }
+
+  /* Letter-substitution marks */
+  .sub-large {
+    font-family: "Geist", sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    text-transform: lowercase;
+    font-size: 40px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+  }
+  .sub-nav {
+    font-family: "Geist", sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    text-transform: lowercase;
+    font-size: 20px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+  }
+
+  /* reaction arrow for direction 23 */
+  .rxn-large {
+    font-family: "Geist", sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    text-transform: lowercase;
+    font-size: 40px;
+    display: inline-flex; align-items: center; gap: 10px;
+  }
+  .rxn-nav {
+    font-family: "Geist", sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    text-transform: lowercase;
+    font-size: 20px;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>BioTicker — round 4</h1>
+  <p class="subtitle">Eight more directions. First four are new biology/chemistry accents (appended). Last four are letter-substitution concepts — the science lives <em>inside</em> the word, not beside it.</p>
+
+  <div class="leader">
+    <span class="leader-label">Still to beat · 5 + B</span>
+    <span class="leader-mark">bioticker<span class="dot"></span></span>
+  </div>
+
+  <h2>Appended accents — new biology/chemistry icons</h2>
+
+  <!-- D19 antibody Y -->
+  <div class="combo">
+    <div class="combo-label"><span class="pill">19</span> Antibody Y-mark  (immunotherapy nod)</div>
+    <div class="combo-body">
+      <div class="hero">
+        <div class="mark-large">
+          bioticker
+          <svg class="acc-lg" width="20" height="20" viewBox="0 0 20 20">
+            <line x1="10" y1="10" x2="10" y2="18" stroke="#3fb950" stroke-width="2.2" stroke-linecap="round"/>
+            <line x1="10" y1="10" x2="4" y2="3" stroke="#3fb950" stroke-width="2.2" stroke-linecap="round"/>
+            <line x1="10" y1="10" x2="16" y2="3" stroke="#3fb950" stroke-width="2.2" stroke-linecap="round"/>
+            <circle cx="4" cy="3" r="1.8" fill="#3fb950"/>
+            <circle cx="16" cy="3" r="1.8" fill="#3fb950"/>
+          </svg>
+        </div>
+      </div>
+      <div class="nav">
+        <div class="mark-nav">
+          bioticker
+          <svg class="acc-sm" width="12" height="12" viewBox="0 0 20 20">
+            <line x1="10" y1="10" x2="10" y2="18" stroke="#3fb950" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="10" y1="10" x2="4" y2="3" stroke="#3fb950" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="10" y1="10" x2="16" y2="3" stroke="#3fb950" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="4" cy="3" r="2" fill="#3fb950"/>
+            <circle cx="16" cy="3" r="2" fill="#3fb950"/>
+          </svg>
+        </div>
+        <div class="links"><a>Watchlist</a><a>Calendar</a><a>Valuation</a><a>Peers</a></div>
+        <div class="btn">Sign in</div>
+      </div>
+      <p class="notes">An antibody Y-shape — instantly readable as immunology / immunotherapy. Very specific to biotech's most commercially successful modality (Keytruda, Humira, etc.). Bonus: it looks like a tick/up-arrow at a glance, so it doubles as a "gains" symbol.</p>
+    </div>
+  </div>
+
+  <!-- D20 virus capsid -->
+  <div class="combo">
+    <div class="combo-label"><span class="pill">20</span> Virus capsid  (spiky ball)</div>
+    <div class="combo-body">
+      <div class="hero">
+        <div class="mark-large">
+          bioticker
+          <svg class="acc-lg" width="20" height="20" viewBox="0 0 20 20">
+            <circle cx="10" cy="10" r="4.5" fill="#3fb950"/>
+            <!-- 8 spikes -->
+            <g stroke="#3fb950" stroke-width="1.4" stroke-linecap="round">
+              <line x1="10" y1="5" x2="10" y2="1"/>
+              <line x1="10" y1="15" x2="10" y2="19"/>
+              <line x1="5" y1="10" x2="1" y2="10"/>
+              <line x1="15" y1="10" x2="19" y2="10"/>
+              <line x1="6.5" y1="6.5" x2="3.7" y2="3.7"/>
+              <line x1="13.5" y1="6.5" x2="16.3" y2="3.7"/>
+              <line x1="6.5" y1="13.5" x2="3.7" y2="16.3"/>
+              <line x1="13.5" y1="13.5" x2="16.3" y2="16.3"/>
+            </g>
+            <g fill="#3fb950">
+              <circle cx="10" cy="1" r="0.9"/>
+              <circle cx="10" cy="19" r="0.9"/>
+              <circle cx="1" cy="10" r="0.9"/>
+              <circle cx="19" cy="10" r="0.9"/>
+              <circle cx="3.7" cy="3.7" r="0.9"/>
+              <circle cx="16.3" cy="3.7" r="0.9"/>
+              <circle cx="3.7" cy="16.3" r="0.9"/>
+              <circle cx="16.3" cy="16.3" r="0.9"/>
+            </g>
+          </svg>
+        </div>
+      </div>
+      <div class="nav">
+        <div class="mark-nav">
+          bioticker
+          <svg class="acc-sm" width="13" height="13" viewBox="0 0 20 20">
+            <circle cx="10" cy="10" r="4.5" fill="#3fb950"/>
+            <g stroke="#3fb950" stroke-width="1.8" stroke-linecap="round">
+              <line x1="10" y1="5" x2="10" y2="1"/><line x1="10" y1="15" x2="10" y2="19"/>
+              <line x1="5" y1="10" x2="1" y2="10"/><line x1="15" y1="10" x2="19" y2="10"/>
+              <line x1="6.5" y1="6.5" x2="3.7" y2="3.7"/><line x1="13.5" y1="6.5" x2="16.3" y2="3.7"/>
+              <line x1="6.5" y1="13.5" x2="3.7" y2="16.3"/><line x1="13.5" y1="13.5" x2="16.3" y2="16.3"/>
+            </g>
+          </svg>
+        </div>
+        <div class="links"><a>Watchlist</a><a>Calendar</a><a>Valuation</a><a>Peers</a></div>
+        <div class="btn">Sign in</div>
+      </div>
+      <p class="notes">Post-COVID, a spiky-ball capsid reads as "virus" in half a second. Loud, distinctive, memorable. Risk: some users might read it as negative ("viral outbreak = bad"). Strong if you want personality, maybe too much if you want a calm tool.</p>
+    </div>
+  </div>
+
+  <!-- D21 pipette droplet -->
+  <div class="combo">
+    <div class="combo-label"><span class="pill">21</span> Pipette droplet  (lab / sample)</div>
+    <div class="combo-body">
+      <div class="hero">
+        <div class="mark-large">
+          bioticker
+          <svg class="acc-lg" width="14" height="20" viewBox="0 0 14 20">
+            <path d="M7 1 C7 1 1 10 1 14 C1 17.3 3.7 20 7 20 C10.3 20 13 17.3 13 14 C13 10 7 1 7 1 Z" fill="#3fb950"/>
+          </svg>
+        </div>
+      </div>
+      <div class="nav">
+        <div class="mark-nav">
+          bioticker
+          <svg class="acc-sm" width="8" height="12" viewBox="0 0 14 20">
+            <path d="M7 1 C7 1 1 10 1 14 C1 17.3 3.7 20 7 20 C10.3 20 13 17.3 13 14 C13 10 7 1 7 1 Z" fill="#3fb950"/>
+          </svg>
+        </div>
+        <div class="links"><a>Watchlist</a><a>Calendar</a><a>Valuation</a><a>Peers</a></div>
+        <div class="btn">Sign in</div>
+      </div>
+      <p class="notes">A single droplet — pipette, vial, liquid sample. One of the most universal lab symbols, and it keeps the same "small green blob" visual rhythm as the original dot. Slightly more lab-flavored than a flat circle, no extra reading required.</p>
+    </div>
+  </div>
+
+  <!-- D22 base pair rungs -->
+  <div class="combo">
+    <div class="combo-label"><span class="pill">22</span> DNA base-pair rungs  (3 parallel bars)</div>
+    <div class="combo-body">
+      <div class="hero">
+        <div class="mark-large">
+          bioticker
+          <svg class="acc-lg" width="22" height="20" viewBox="0 0 22 20">
+            <line x1="1" y1="2" x2="1" y2="18" stroke="#3fb950" stroke-width="1.8"/>
+            <line x1="21" y1="2" x2="21" y2="18" stroke="#3fb950" stroke-width="1.8"/>
+            <line x1="1" y1="5" x2="21" y2="5" stroke="#3fb950" stroke-width="1.8"/>
+            <line x1="1" y1="10" x2="21" y2="10" stroke="#3fb950" stroke-width="1.8"/>
+            <line x1="1" y1="15" x2="21" y2="15" stroke="#3fb950" stroke-width="1.8"/>
+          </svg>
+        </div>
+      </div>
+      <div class="nav">
+        <div class="mark-nav">
+          bioticker
+          <svg class="acc-sm" width="14" height="12" viewBox="0 0 22 20">
+            <line x1="1" y1="2" x2="1" y2="18" stroke="#3fb950" stroke-width="2.4"/>
+            <line x1="21" y1="2" x2="21" y2="18" stroke="#3fb950" stroke-width="2.4"/>
+            <line x1="1" y1="5" x2="21" y2="5" stroke="#3fb950" stroke-width="2.4"/>
+            <line x1="1" y1="10" x2="21" y2="10" stroke="#3fb950" stroke-width="2.4"/>
+            <line x1="1" y1="15" x2="21" y2="15" stroke="#3fb950" stroke-width="2.4"/>
+          </svg>
+        </div>
+        <div class="links"><a>Watchlist</a><a>Calendar</a><a>Valuation</a><a>Peers</a></div>
+        <div class="btn">Sign in</div>
+      </div>
+      <p class="notes">A tiny DNA ladder cross-section. Three rungs between two rails — geometric, quiet, and doubles as a "signal bars" icon (like Wi-Fi or cell signal), which is a nice ambiguity for a data tool. Very minimal.</p>
+    </div>
+  </div>
+
+  <h2>Letter-substitution — science lives inside the word</h2>
+
+  <!-- D23 reaction arrow -->
+  <div class="combo">
+    <div class="combo-label"><span class="pill">23</span> Reaction arrow between bio and ticker  (bio ⇌ ticker)</div>
+    <div class="combo-body">
+      <div class="hero">
+        <div class="rxn-large">
+          bio
+          <svg width="40" height="22" viewBox="0 0 40 22">
+            <!-- top arrow right -->
+            <path d="M2 7 L36 7" stroke="#3fb950" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M32 4 L36 7 L32 10" stroke="#3fb950" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <!-- bottom arrow left -->
+            <path d="M38 15 L4 15" stroke="#3fb950" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M8 18 L4 15 L8 12" stroke="#3fb950" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          </svg>
+          ticker
+        </div>
+      </div>
+      <div class="nav">
+        <div class="rxn-nav">
+          bio
+          <svg width="22" height="12" viewBox="0 0 40 22">
+            <path d="M2 7 L36 7" stroke="#3fb950" stroke-width="2.6" stroke-linecap="round"/>
+            <path d="M32 4 L36 7 L32 10" stroke="#3fb950" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <path d="M38 15 L4 15" stroke="#3fb950" stroke-width="2.6" stroke-linecap="round"/>
+            <path d="M8 18 L4 15 L8 12" stroke="#3fb950" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          </svg>
+          ticker
+        </div>
+        <div class="links"><a>Watchlist</a><a>Calendar</a><a>Valuation</a><a>Peers</a></div>
+        <div class="btn">Sign in</div>
+      </div>
+      <p class="notes">Chemistry equilibrium arrow (⇌) splits the name into two sides of a reaction: <em>bio</em> ⇌ <em>ticker</em>. Biology on the left, stock market on the right, each transforming into the other. Smartest concept of the set — the name literally describes what the product does.</p>
+    </div>
+  </div>
+
+  <!-- D24 o becomes cell -->
+  <div class="combo">
+    <div class="combo-label"><span class="pill">24</span> The "o" in "bio" becomes a cell (nucleus inside)</div>
+    <div class="combo-body">
+      <div class="hero">
+        <div class="sub-large">
+          bi
+          <svg width="38" height="38" viewBox="0 0 38 38" style="margin: 0 -2px;">
+            <circle cx="19" cy="19" r="17" fill="none" stroke="#e6edf3" stroke-width="5"/>
+            <circle cx="19" cy="19" r="4" fill="#3fb950"/>
+          </svg>
+          ticker
+        </div>
+      </div>
+      <div class="nav">
+        <div class="sub-nav">
+          bi
+          <svg width="19" height="19" viewBox="0 0 38 38" style="margin: 0 -1px;">
+            <circle cx="19" cy="19" r="16" fill="none" stroke="#e6edf3" stroke-width="6"/>
+            <circle cx="19" cy="19" r="5" fill="#3fb950"/>
+          </svg>
+          ticker
+        </div>
+        <div class="links"><a>Watchlist</a><a>Calendar</a><a>Valuation</a><a>Peers</a></div>
+        <div class="btn">Sign in</div>
+      </div>
+      <p class="notes">The "o" in "bio" is secretly a cell — a green nucleus floating inside the letter. You don't see it until you do, and then it's hard to unsee. Reads cleanly as the word, has science baked in, no extra mark to manage.</p>
+    </div>
+  </div>
+
+  <!-- D25 benzene as middle dot -->
+  <div class="combo">
+    <div class="combo-label"><span class="pill">25</span> Benzene hexagon as the divider  (bio⬡ticker)</div>
+    <div class="combo-body">
+      <div class="hero">
+        <div class="sub-large">
+          bio
+          <svg width="22" height="26" viewBox="0 0 22 26" style="margin: 0 4px;">
+            <polygon points="11,2 20,7.5 20,18.5 11,24 2,18.5 2,7.5" fill="none" stroke="#3fb950" stroke-width="2"/>
+          </svg>
+          ticker
+        </div>
+      </div>
+      <div class="nav">
+        <div class="sub-nav">
+          bio
+          <svg width="12" height="14" viewBox="0 0 22 26" style="margin: 0 2px;">
+            <polygon points="11,2 20,7.5 20,18.5 11,24 2,18.5 2,7.5" fill="none" stroke="#3fb950" stroke-width="2.2"/>
+          </svg>
+          ticker
+        </div>
+        <div class="links"><a>Watchlist</a><a>Calendar</a><a>Valuation</a><a>Peers</a></div>
+        <div class="btn">Sign in</div>
+      </div>
+      <p class="notes">A benzene ring sits between "bio" and "ticker" like a chemistry-flavored interpunct. Reads as "bio · ticker" but the dot is a molecule. Quieter than the reaction arrow (D23), louder than the trailing accent from D14.</p>
+    </div>
+  </div>
+
+  <!-- D26 "i" dots as atoms -->
+  <div class="combo">
+    <div class="combo-label"><span class="pill">26</span> Both "i" dots become connected atoms</div>
+    <div class="combo-body">
+      <div class="hero">
+        <div class="sub-large" style="position: relative;">
+          b<span style="position: relative;">i<svg style="position: absolute; top: -20px; left: 50%; transform: translateX(-50%);" width="70" height="12" viewBox="0 0 70 12">
+            <line x1="6" y1="6" x2="64" y2="6" stroke="#3fb950" stroke-width="1.4" stroke-dasharray="2 3"/>
+            <circle cx="6" cy="6" r="4" fill="#3fb950"/>
+            <circle cx="64" cy="6" r="4" fill="#3fb950"/>
+          </svg></span>ot<span>i</span>cker
+        </div>
+      </div>
+      <div class="nav">
+        <div class="sub-nav" style="position: relative;">
+          b<span style="position: relative;">i<svg style="position: absolute; top: -10px; left: 50%; transform: translateX(-50%);" width="36" height="7" viewBox="0 0 70 12">
+            <line x1="6" y1="6" x2="64" y2="6" stroke="#3fb950" stroke-width="1.8" stroke-dasharray="2 3"/>
+            <circle cx="6" cy="6" r="5" fill="#3fb950"/>
+            <circle cx="64" cy="6" r="5" fill="#3fb950"/>
+          </svg></span>ot<span>i</span>cker
+        </div>
+        <div class="links"><a>Watchlist</a><a>Calendar</a><a>Valuation</a><a>Peers</a></div>
+        <div class="btn">Sign in</div>
+      </div>
+      <p class="notes">The two "i" dots in "b<strong>i</strong>ot<strong>i</strong>cker" are connected by a dashed molecular bond — so the word is literally a two-atom molecule. Most conceptually playful option. Works because the word happens to have two dotted letters in perfect positions.</p>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -5,6 +5,7 @@ import StockChart from "@/components/StockChart";
 import StarButton from "@/components/StarButton";
 import Valuation from "@/components/Valuation";
 import PeerComparison from "@/components/PeerComparison";
+import Brand from "@/components/Brand";
 
 // Next.js 14 dynamic route — `params.ticker` from the URL.
 type Params = { ticker: string };
@@ -22,14 +23,8 @@ export default async function CompanyPage({ params }: { params: Params }) {
     <main className="min-h-screen">
       {/* Top nav */}
       <nav className="flex items-center justify-between px-8 py-4 border-b border-border-subtle">
-        <Link
-          href="/"
-          className="flex items-center gap-2.5 font-bold tracking-tight"
-        >
-          <div className="w-7 h-7 rounded-md bg-gradient-to-br from-accent-blue to-accent-purple flex items-center justify-center text-bg-app font-bold text-sm">
-            B
-          </div>
-          BioRadar
+        <Link href="/" className="inline-flex">
+          <Brand size="nav" />
         </Link>
         <div className="flex items-center gap-6">
           <Link

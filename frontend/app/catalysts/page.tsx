@@ -11,8 +11,13 @@ import {
   type EarningsEvent,
 } from "@/lib/api";
 import { getWatchlist, subscribeWatchlist } from "@/lib/watchlist";
+import Brand from "@/components/Brand";
 
-// A single unified row that renders in the timeline. We normalise both
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+// A single unified row that renders in the calendar. We normalise both
 // catalyst and earnings events to this shape so one list can sort/filter
 // across them cleanly.
 type TimelineEvent = {
@@ -26,33 +31,133 @@ type TimelineEvent = {
   source?: CatalystSource | "earnings";
 };
 
-type Filter = "all" | "readout" | "fda" | "earnings" | "other";
+type Scope = "week" | "month" | "quarter";
+type Tier = "a" | "b" | "c" | "d";
 
-const FILTER_LABELS: Record<Filter, string> = {
-  all: "All",
-  readout: "Readouts",
-  fda: "FDA",
+const SCOPE_DAYS: Record<Scope, number> = {
+  week: 7,
+  month: 31,
+  quarter: 93,
+};
+
+const SCOPE_LABEL: Record<Scope, string> = {
+  week: "This week",
+  month: "This month",
+  quarter: "This quarter",
+};
+
+// ---------------------------------------------------------------------------
+// Tiering
+//
+// The tier assignment is the editorial layer — what "really matters" this
+// week vs what's routine background. Rules:
+//   Tier A — high-impact FDA or pivotal readouts (cards w/ blurbs)
+//   Tier B — other clinical readouts (medium tiles)
+//   Tier C — earnings (chips)
+//   Tier D — everything else (filings, licensing, low-impact items)
+// ---------------------------------------------------------------------------
+
+const TIER_A_TYPES = new Set<TimelineEvent["type"]>([
+  "approval",
+  "fda-advisory",
+]);
+
+const READOUT_TYPES = new Set<TimelineEvent["type"]>([
+  "readout",
+  "readout-positive",
+  "readout-negative",
+  "failure",
+]);
+
+function tierOf(e: TimelineEvent): Tier {
+  if (e.type === "earnings") return "c";
+  if (TIER_A_TYPES.has(e.type) && e.impact === "high") return "a";
+  // High-impact readouts are also tier-A (think Ph3 primary endpoint reads).
+  if (READOUT_TYPES.has(e.type) && e.impact === "high") return "a";
+  if (READOUT_TYPES.has(e.type)) return "b";
+  return "d";
+}
+
+// ---------------------------------------------------------------------------
+// Type styling
+// ---------------------------------------------------------------------------
+
+type Palette = "amber" | "blue" | "purple" | "green" | "red" | "dim";
+
+function paletteOf(t: TimelineEvent["type"]): Palette {
+  switch (t) {
+    case "approval":
+    case "readout-positive":
+    case "launch":
+      return "green";
+    case "readout-negative":
+    case "failure":
+      return "red";
+    case "fda-advisory":
+      return "blue";
+    case "readout":
+      return "purple";
+    case "filing":
+      return "amber";
+    case "licensing":
+      return "blue";
+    case "earnings":
+      return "green";
+    default:
+      return "dim";
+  }
+}
+
+const TYPE_LABEL: Record<TimelineEvent["type"], string> = {
+  approval: "Approval",
+  "readout-positive": "Readout +",
+  readout: "Readout",
+  "readout-negative": "Readout −",
+  failure: "Failure",
+  "fda-advisory": "AdCom",
+  launch: "Launch",
+  filing: "Filing",
+  licensing: "Licensing",
   earnings: "Earnings",
   other: "Other",
 };
 
-// Bucket raw event type → filter bucket. Readout buckets collapse positive/
-// negative/unknown together; FDA covers approvals, AdComs, and filings.
-function bucketOf(t: TimelineEvent["type"]): Filter {
-  if (t === "earnings") return "earnings";
-  if (t === "approval" || t === "fda-advisory" || t === "filing") return "fda";
-  if (t === "readout" || t === "readout-positive" || t === "readout-negative" || t === "failure")
-    return "readout";
-  return "other";
-}
+// Explicit class maps so Tailwind JIT can see every string.
+const DOT_CLASS: Record<Palette, string> = {
+  amber: "bg-accent-amber",
+  blue: "bg-accent-blue",
+  purple: "bg-accent-purple",
+  green: "bg-accent-green",
+  red: "bg-accent-red",
+  dim: "bg-text-dim",
+};
+const TEXT_CLASS: Record<Palette, string> = {
+  amber: "text-accent-amber",
+  blue: "text-accent-blue",
+  purple: "text-accent-purple",
+  green: "text-accent-green",
+  red: "text-accent-red",
+  dim: "text-text-dim",
+};
+const BORDER_CLASS: Record<Palette, string> = {
+  amber: "border-accent-amber",
+  blue: "border-accent-blue",
+  purple: "border-accent-purple",
+  green: "border-accent-green",
+  red: "border-accent-red",
+  dim: "border-border",
+};
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
 
 export default function CatalystsPage() {
   const [mounted, setMounted] = useState(false);
   const [tickers, setTickers] = useState<string[]>([]);
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(false);
-  const [filter, setFilter] = useState<Filter>("all");
-  const [showPast, setShowPast] = useState(false);
+  const [scope, setScope] = useState<Scope>("week");
 
   // Hydrate watchlist once mounted; subscribe so stars on other tabs refresh.
   useEffect(() => {
@@ -61,8 +166,8 @@ export default function CatalystsPage() {
     return subscribeWatchlist((next) => setTickers(next));
   }, []);
 
-  // Fan-out fetch. We always refetch on watchlist change — catalyst data is
-  // cheap and the list is usually small. No per-ticker cache needed.
+  // Fan-out fetch across every watchlist ticker. We refetch when the set
+  // changes — data is cheap and the list is small.
   useEffect(() => {
     if (!mounted) return;
     if (tickers.length === 0) {
@@ -75,7 +180,10 @@ export default function CatalystsPage() {
     (async () => {
       const perTicker = await Promise.all(
         tickers.map(async (t) => {
-          const [cat, earn] = await Promise.all([getCatalysts(t), getEarnings(t)]);
+          const [cat, earn] = await Promise.all([
+            getCatalysts(t),
+            getEarnings(t),
+          ]);
           const catalystEvents: TimelineEvent[] = (cat?.events ?? []).map(
             (e: CatalystEvent) => ({
               ticker: t,
@@ -113,333 +221,478 @@ export default function CatalystsPage() {
     };
   }, [tickers, mounted]);
 
-  // Apply filter + past toggle. Counts for the filter chips reflect the
-  // current past/future view so the number on the chip matches what you see.
+  // Apply scope filter. We clip past events and anything beyond the scope
+  // window; the glance counts and tier sections all operate on this list.
   const visible = useMemo(() => {
-    const base = showPast ? events : events.filter((e) => !e.past);
-    return filter === "all" ? base : base.filter((e) => bucketOf(e.type) === filter);
-  }, [events, filter, showPast]);
+    const horizonDays = SCOPE_DAYS[scope];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const horizon = new Date(today);
+    horizon.setDate(horizon.getDate() + horizonDays);
+    return events.filter((e) => {
+      if (e.past) return false;
+      const [y, m, d] = e.date.split("-").map(Number);
+      const dt = new Date(y, m - 1, d);
+      return dt >= today && dt <= horizon;
+    });
+  }, [events, scope]);
 
-  const counts = useMemo(() => {
-    const base = showPast ? events : events.filter((e) => !e.past);
-    const c: Record<Filter, number> = { all: base.length, readout: 0, fda: 0, earnings: 0, other: 0 };
-    for (const e of base) c[bucketOf(e.type)]++;
-    return c;
-  }, [events, showPast]);
-
-  // Group by "YYYY-MM" so section headers stay chronological even when months
-  // span across years.
-  const grouped = useMemo(() => {
-    const g = new Map<string, TimelineEvent[]>();
-    for (const e of visible) {
-      const key = e.date.slice(0, 7);
-      if (!g.has(key)) g.set(key, []);
-      g.get(key)!.push(e);
-    }
-    return Array.from(g.entries());
+  // Split into tiers.
+  const tiered = useMemo(() => {
+    const buckets: Record<Tier, TimelineEvent[]> = { a: [], b: [], c: [], d: [] };
+    for (const e of visible) buckets[tierOf(e)].push(e);
+    return buckets;
   }, [visible]);
 
-  const pastCount = events.filter((e) => e.past).length;
+  // Glance-strip counts — by category rather than tier, so the user sees the
+  // mix at a glance (matches legend order).
+  const counts = useMemo(() => {
+    const c = { pdufa: 0, adcom: 0, readout: 0, earnings: 0 };
+    for (const e of visible) {
+      if (e.type === "earnings") c.earnings++;
+      else if (e.type === "approval") c.pdufa++;
+      else if (e.type === "fda-advisory") c.adcom++;
+      else if (READOUT_TYPES.has(e.type)) c.readout++;
+    }
+    return c;
+  }, [visible]);
+
+  const dateRange = useMemo(() => {
+    const start = new Date();
+    const end = new Date();
+    end.setDate(end.getDate() + SCOPE_DAYS[scope]);
+    const fmt = (d: Date) =>
+      d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    return `${fmt(start)} – ${fmt(end)}, ${end.getFullYear()}`;
+  }, [scope]);
 
   return (
     <main className="min-h-screen">
+      {/* ==================== NAV ==================== */}
       <nav className="flex items-center justify-between px-8 py-4 border-b border-border-subtle">
-        <Link href="/" className="flex items-center gap-2.5 font-bold tracking-tight">
-          <div className="w-7 h-7 rounded-md bg-gradient-to-br from-accent-blue to-accent-purple flex items-center justify-center text-bg-app font-bold text-sm">
-            B
-          </div>
-          BioRadar
+        <Link href="/" className="inline-flex">
+          <Brand size="nav" />
         </Link>
         <div className="flex items-center gap-6">
-          <Link href="/" className="text-text-dim hover:text-text text-[13px]">
+          <Link
+            href="/"
+            className="text-text-dim hover:text-text text-[13px] font-medium"
+          >
             Search
           </Link>
-          <Link href="/watchlist" className="text-text-dim hover:text-text text-[13px]">
+          <Link
+            href="/watchlist"
+            className="text-text-dim hover:text-text text-[13px] font-medium"
+          >
             Watchlist
           </Link>
         </div>
       </nav>
 
-      {/* Header */}
-      <div className="px-8 py-6 border-b border-border-subtle">
-        <div className="text-xs font-semibold text-accent-blue tracking-widest uppercase mb-1.5">
-          Catalyst calendar
-        </div>
-        <h1 className="text-2xl font-bold tracking-tight">
-          {mounted && !loading ? visible.length : 0}{" "}
-          <span className="text-text-dim font-normal">
-            {visible.length === 1 ? "event" : "events"}
-          </span>
-          {mounted && tickers.length > 0 && (
-            <span className="text-text-dimmer font-normal text-base ml-2">
-              across {tickers.length} {tickers.length === 1 ? "ticker" : "tickers"}
-            </span>
-          )}
-        </h1>
-      </div>
-
-      {/* Body */}
-      {!mounted ? (
-        <div className="px-8 py-10 text-sm text-text-dim">Loading…</div>
-      ) : tickers.length === 0 ? (
-        <EmptyState kind="no-watchlist" />
-      ) : (
-        <div className="px-8 py-6">
-          {/* Filter controls */}
-          <div className="flex items-center gap-2 flex-wrap mb-6">
-            {(Object.keys(FILTER_LABELS) as Filter[]).map((f) => {
-              const active = filter === f;
-              return (
-                <button
-                  key={f}
-                  type="button"
-                  onClick={() => setFilter(f)}
-                  className={`px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors ${
-                    active
-                      ? "bg-accent-blue text-bg-app border-accent-blue"
-                      : "bg-bg-elev text-text-dim border-border-subtle hover:text-text hover:border-border"
-                  }`}
-                >
-                  {FILTER_LABELS[f]}{" "}
-                  <span
-                    className={`font-mono text-[11px] ${
-                      active ? "opacity-80" : "text-text-dimmer"
-                    }`}
-                  >
-                    {counts[f]}
-                  </span>
-                </button>
-              );
-            })}
-
-            <div className="flex-1" />
-
-            {pastCount > 0 && (
-              <button
-                type="button"
-                onClick={() => setShowPast((v) => !v)}
-                className={`px-3 py-1.5 rounded-md text-[12px] font-medium border transition-colors ${
-                  showPast
-                    ? "bg-bg-elev2 text-text border-border"
-                    : "bg-bg-elev text-text-dim border-border-subtle hover:text-text"
-                }`}
-              >
-                {showPast ? "Hide" : "Show"} past{" "}
-                <span className="font-mono text-[11px] text-text-dimmer">({pastCount})</span>
-              </button>
-            )}
+      <div className="max-w-[1200px] mx-auto px-8 pt-9 pb-20">
+        {/* ==================== HEADER ==================== */}
+        <div className="flex items-end justify-between mb-7 pb-5 border-b border-border-subtle gap-6 flex-wrap">
+          <div>
+            <h1 className="text-[32px] font-bold tracking-[-0.02em] mb-1.5">
+              Catalysts
+            </h1>
+            <p className="text-text-dim text-sm leading-relaxed m-0">
+              {mounted && !loading ? (
+                <>
+                  <span className="text-accent-green font-medium">
+                    {visible.length}{" "}
+                    {visible.length === 1 ? "event" : "events"}
+                  </span>{" "}
+                  {tickers.length > 0 && (
+                    <>
+                      across {tickers.length}{" "}
+                      {tickers.length === 1 ? "ticker" : "tickers"} ·{" "}
+                    </>
+                  )}
+                  {dateRange}
+                </>
+              ) : (
+                "Loading…"
+              )}
+            </p>
           </div>
 
-          {loading && events.length === 0 ? (
-            <div className="text-sm text-text-dim py-10">Loading calendar…</div>
-          ) : grouped.length === 0 ? (
-            <EmptyState kind="no-events" />
-          ) : (
-            <div className="space-y-8">
-              {grouped.map(([monthKey, items]) => (
-                <MonthSection key={monthKey} monthKey={monthKey} items={items} />
-              ))}
-            </div>
-          )}
+          <div className="flex gap-2 items-center">
+            <ToggleGroup<Scope>
+              value={scope}
+              onChange={setScope}
+              options={[
+                { v: "week", label: "Week" },
+                { v: "month", label: "Month" },
+                { v: "quarter", label: "Quarter" },
+              ]}
+            />
+          </div>
         </div>
-      )}
+
+        {/* ==================== BODY ==================== */}
+        {!mounted ? null : tickers.length === 0 ? (
+          <EmptyState kind="no-watchlist" />
+        ) : loading && events.length === 0 ? (
+          <div className="text-sm text-text-dim py-10">Loading calendar…</div>
+        ) : visible.length === 0 ? (
+          <EmptyState kind="no-events" scope={scope} />
+        ) : (
+          <>
+            {/* Glance strip */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-7">
+              <GlanceCard label="PDUFA" value={counts.pdufa} palette="amber" />
+              <GlanceCard label="AdCom" value={counts.adcom} palette="blue" />
+              <GlanceCard
+                label="Readouts"
+                value={counts.readout}
+                palette="purple"
+              />
+              <GlanceCard
+                label="Earnings"
+                value={counts.earnings}
+                palette="green"
+              />
+            </div>
+
+            {/* Legend bar */}
+            <div className="flex items-center justify-between mb-5">
+              <div className="font-mono text-[11px] text-text-dim uppercase tracking-[0.14em]">
+                Ranked by expected market impact
+              </div>
+              <Legend />
+            </div>
+
+            {/* Tiers */}
+            <div className="grid gap-7">
+              {tiered.a.length > 0 && (
+                <TierSection
+                  label="High impact"
+                  labelPalette="amber"
+                  count={tiered.a.length}
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                    {tiered.a.map((e, i) => (
+                      <TierACard key={`${e.ticker}-${e.date}-${i}`} event={e} />
+                    ))}
+                  </div>
+                </TierSection>
+              )}
+
+              {tiered.b.length > 0 && (
+                <TierSection
+                  label="Clinical readouts"
+                  labelPalette="purple"
+                  count={tiered.b.length}
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {tiered.b.map((e, i) => (
+                      <TierBCard key={`${e.ticker}-${e.date}-${i}`} event={e} />
+                    ))}
+                  </div>
+                </TierSection>
+              )}
+
+              {tiered.c.length > 0 && (
+                <TierSection
+                  label="Earnings"
+                  labelPalette="green"
+                  count={tiered.c.length}
+                >
+                  <div className="flex flex-wrap gap-2">
+                    {tiered.c.map((e, i) => (
+                      <TierChip
+                        key={`${e.ticker}-${e.date}-${i}`}
+                        event={e}
+                        palette="green"
+                      />
+                    ))}
+                  </div>
+                </TierSection>
+              )}
+
+              {tiered.d.length > 0 && (
+                <TierSection
+                  label="Also this week"
+                  labelPalette="dim"
+                  count={tiered.d.length}
+                >
+                  <div className="flex flex-wrap gap-2">
+                    {tiered.d.map((e, i) => (
+                      <TierChip
+                        key={`${e.ticker}-${e.date}-${i}`}
+                        event={e}
+                        palette={paletteOf(e.type)}
+                      />
+                    ))}
+                  </div>
+                </TierSection>
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </main>
   );
 }
 
-/* ---------- month section ---------- */
+// ---------------------------------------------------------------------------
+// Controls
+// ---------------------------------------------------------------------------
 
-function MonthSection({
-  monthKey,
-  items,
+function ToggleGroup<T extends string>({
+  value,
+  onChange,
+  options,
 }: {
-  monthKey: string;
-  items: TimelineEvent[];
+  value: T;
+  onChange: (v: T) => void;
+  options: { v: T; label: string }[];
 }) {
-  // monthKey is "YYYY-MM". Build a local Date on the 1st to get the label;
-  // parse from YYYY-MM-01 so it renders stably regardless of TZ.
-  const label = useMemo(() => {
-    const [y, m] = monthKey.split("-").map(Number);
-    const d = new Date(y, m - 1, 1);
-    return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-  }, [monthKey]);
+  return (
+    <div className="inline-flex bg-bg-elev border border-border rounded-lg overflow-hidden">
+      {options.map((o, i) => (
+        <button
+          key={o.v}
+          type="button"
+          onClick={() => onChange(o.v)}
+          className={`px-3.5 py-1.5 text-[12.5px] font-medium border-r border-border-subtle last:border-r-0 transition-colors ${
+            o.v === value
+              ? "bg-bg-elev2 text-text"
+              : "text-text-dim hover:text-text"
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
+function Legend() {
+  return (
+    <div className="flex gap-3.5 font-mono text-[10px] text-text-dim tracking-[0.06em]">
+      <LegendItem label="PDUFA" palette="amber" />
+      <LegendItem label="AdCom" palette="blue" />
+      <LegendItem label="Readout" palette="purple" />
+      <LegendItem label="Earnings" palette="green" />
+    </div>
+  );
+}
+
+function LegendItem({ label, palette }: { label: string; palette: Palette }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className={`inline-block w-[7px] h-[7px] rounded-sm ${DOT_CLASS[palette]}`} />
+      {label}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Glance card
+// ---------------------------------------------------------------------------
+
+function GlanceCard({
+  label,
+  value,
+  palette,
+}: {
+  label: string;
+  value: number;
+  palette: Palette;
+}) {
+  return (
+    <div className="bg-bg-elev border border-border-subtle rounded-[10px] px-4 py-3.5 grid gap-1">
+      <div className="font-mono text-[10px] text-text-dim uppercase tracking-[0.12em]">
+        {label}
+      </div>
+      <div
+        className={`font-mono font-semibold text-[26px] tracking-[-0.01em] tabular-nums ${TEXT_CLASS[palette]}`}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tier section shell
+// ---------------------------------------------------------------------------
+
+function TierSection({
+  label,
+  labelPalette,
+  count,
+  children,
+}: {
+  label: string;
+  labelPalette: Palette;
+  count: number;
+  children: React.ReactNode;
+}) {
   return (
     <section>
-      <div className="flex items-baseline justify-between border-b border-border-subtle pb-2 mb-3">
-        <h2 className="text-[11px] font-semibold text-text-dim uppercase tracking-widest">
+      <div className="flex items-center gap-3 mb-3 font-mono text-[11px] uppercase tracking-[0.14em]">
+        <span
+          className={`font-semibold ${labelPalette === "dim" ? "text-text-dim" : TEXT_CLASS[labelPalette]}`}
+        >
           {label}
-        </h2>
-        <span className="font-mono text-[11px] text-text-dimmer">
-          {items.length} {items.length === 1 ? "event" : "events"}
         </span>
+        <span className="bg-bg-elev2 text-text px-2 py-[1px] rounded text-[10px] tracking-[0.06em]">
+          {count}
+        </span>
+        <span className="flex-1 h-px bg-border-subtle" />
       </div>
-      <div className="flex flex-col">
-        {items.map((e, i) => (
-          <EventRow key={`${e.ticker}-${e.date}-${i}`} event={e} />
-        ))}
-      </div>
+      {children}
     </section>
   );
 }
 
-/* ---------- event row ---------- */
+// ---------------------------------------------------------------------------
+// Tier A card — full editorial card
+// ---------------------------------------------------------------------------
 
-function EventRow({ event }: { event: TimelineEvent }) {
-  const dayLabel = useMemo(() => {
-    const [y, m, d] = event.date.split("-").map(Number);
-    const dt = new Date(y, m - 1, d);
-    return {
-      day: String(d).padStart(2, "0"),
-      weekday: dt.toLocaleDateString(undefined, { weekday: "short" }),
-    };
-  }, [event.date]);
+function TierACard({ event }: { event: TimelineEvent }) {
+  const palette = paletteOf(event.type);
+  const when = formatWhen(event.date);
+  const daysOut = daysFromToday(event.date);
 
   return (
     <Link
       href={`/company/${event.ticker}`}
-      className={`group flex items-center gap-4 py-3 border-b border-border-subtle/60 last:border-b-0 hover:bg-bg-elev/40 transition-colors -mx-2 px-2 rounded ${
-        event.past ? "opacity-60" : ""
-      }`}
+      className="group relative bg-bg-elev border border-border-subtle rounded-xl p-5 grid gap-3 overflow-hidden hover:border-border transition-colors"
     >
-      {/* Date column (fixed width for alignment) */}
-      <div className="w-14 flex-shrink-0 text-right">
-        <div className="font-mono font-semibold text-text leading-none">
-          {dayLabel.day}
-        </div>
-        <div className="text-[10px] uppercase tracking-wider text-text-dimmer mt-1">
-          {dayLabel.weekday}
-        </div>
+      <span
+        className={`absolute left-0 top-0 bottom-0 w-[3px] ${DOT_CLASS[palette]}`}
+      />
+      <div className="flex items-center gap-2.5 font-mono text-[10px] uppercase tracking-[0.1em]">
+        <span className={`${TEXT_CLASS[palette]} font-medium`}>
+          {TYPE_LABEL[event.type]}
+        </span>
+        <span className="text-text-dim">{when.full}</span>
+        <span className="ml-auto text-text-dimmer">
+          {daysOut >= 0 ? `in ${daysOut}d` : `${Math.abs(daysOut)}d ago`}
+        </span>
       </div>
-
-      {/* Dot */}
-      <TypeDot type={event.type} />
-
-      {/* Ticker */}
-      <div className="w-20 flex-shrink-0">
-        <span className="font-mono font-semibold text-sm text-text group-hover:text-accent-blue">
+      <div className="flex items-baseline gap-2.5">
+        <span className="font-mono font-semibold text-[26px] text-text group-hover:text-accent-green transition-colors">
           {event.ticker}
         </span>
       </div>
-
-      {/* Title */}
-      <div className="flex-1 min-w-0">
-        <div className="text-sm text-text leading-snug line-clamp-1">
-          {event.title}
-        </div>
-        {event.summary && (
-          <div className="text-[12px] text-text-dim line-clamp-1 mt-0.5">
-            {event.summary}
-          </div>
-        )}
+      <div className="text-[16px] font-medium text-text leading-snug">
+        {event.title}
       </div>
+      {event.summary && (
+        <div className="text-[13px] text-text-dim leading-relaxed">
+          {event.summary}
+        </div>
+      )}
+    </Link>
+  );
+}
 
-      {/* Type pill + impact + source */}
-      <div className="flex items-center gap-2 flex-shrink-0">
-        {event.source && <SourceChip source={event.source} />}
-        <TypePill type={event.type} />
-        {!event.past && event.impact === "high" && (
-          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-accent-red/15 text-accent-red border border-accent-red/30">
-            High
-          </span>
-        )}
+// ---------------------------------------------------------------------------
+// Tier B card — medium tile for readouts
+// ---------------------------------------------------------------------------
+
+function TierBCard({ event }: { event: TimelineEvent }) {
+  const palette = paletteOf(event.type);
+  const when = formatWhen(event.date);
+
+  return (
+    <Link
+      href={`/company/${event.ticker}`}
+      className={`block bg-bg-elev rounded-lg px-4 py-3.5 border-l-[3px] ${BORDER_CLASS[palette]} hover:bg-bg-elev2 transition-colors`}
+    >
+      <div className="flex justify-between font-mono text-[10px] text-text-dim uppercase tracking-[0.08em] mb-1.5">
+        <span>{TYPE_LABEL[event.type]}</span>
+        <span>{when.short}</span>
+      </div>
+      <div className="flex items-baseline gap-2.5 mb-1">
+        <span className="font-mono font-semibold text-[15px] text-text">
+          {event.ticker}
+        </span>
+      </div>
+      <div className="text-text-dim text-[13px] leading-snug line-clamp-2">
+        {event.title}
       </div>
     </Link>
   );
 }
 
-/* ---------- type indicators ---------- */
+// ---------------------------------------------------------------------------
+// Tier chip — compact chip for earnings + "also this week"
+// ---------------------------------------------------------------------------
 
-// Explicit class strings — Tailwind's JIT can't see dynamic template-string
-// class names, so we keep `bg-*` and `text-*` as complete strings here.
-type TypeStyle = { dot: string; text: string };
-const TYPE_STYLE: Record<TimelineEvent["type"], TypeStyle> = {
-  "approval": { dot: "bg-accent-green", text: "text-accent-green" },
-  "readout-positive": { dot: "bg-accent-green", text: "text-accent-green" },
-  "readout": { dot: "bg-accent-blue", text: "text-accent-blue" },
-  "readout-negative": { dot: "bg-accent-red", text: "text-accent-red" },
-  "failure": { dot: "bg-accent-red", text: "text-accent-red" },
-  "fda-advisory": { dot: "bg-accent-purple", text: "text-accent-purple" },
-  "launch": { dot: "bg-accent-green", text: "text-accent-green" },
-  "filing": { dot: "bg-accent-amber", text: "text-accent-amber" },
-  "licensing": { dot: "bg-accent-blue", text: "text-accent-blue" },
-  "earnings": { dot: "bg-text-dim", text: "text-text-dim" },
-  "other": { dot: "bg-text-dim", text: "text-text-dim" },
-};
-
-const TYPE_LABEL: Record<TimelineEvent["type"], string> = {
-  "approval": "Approval",
-  "readout-positive": "Readout +",
-  "readout": "Readout",
-  "readout-negative": "Readout −",
-  "failure": "Failure",
-  "fda-advisory": "FDA AdCom",
-  "launch": "Launch",
-  "filing": "Filing",
-  "licensing": "Licensing",
-  "earnings": "Earnings",
-  "other": "Other",
-};
-
-// Source chip — provenance signal so the user can tell curated from derived
-// events at a glance. Curated events are the highest-confidence signal;
-// everything else carries its data source as a subtle badge.
-const SOURCE_LABEL: Record<NonNullable<TimelineEvent["source"]>, string> = {
-  curated: "Curated",
-  "ctgov-derived": "Trials",
-  "edgar-8k": "8-K",
-  news: "News",
-  earnings: "EDGAR",
-};
-
-function SourceChip({ source }: { source: NonNullable<TimelineEvent["source"]> }) {
-  // Curated entries are the most trustworthy — give them a faint purple tint.
-  // Everything else stays neutral so the calendar doesn't look noisy.
-  const isCurated = source === "curated";
+function TierChip({
+  event,
+  palette,
+}: {
+  event: TimelineEvent;
+  palette: Palette;
+}) {
+  const when = formatWhen(event.date);
   return (
-    <span
-      className={`px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wider border ${
-        isCurated
-          ? "bg-accent-purple/10 text-accent-purple border-accent-purple/30"
-          : "bg-bg-elev text-text-dimmer border-border-subtle"
-      }`}
-      title={`Source: ${SOURCE_LABEL[source]}`}
+    <Link
+      href={`/company/${event.ticker}`}
+      className={`inline-flex items-baseline gap-2 bg-bg-elev border border-border-subtle border-l-[3px] ${BORDER_CLASS[palette]} rounded-full pl-3 pr-3.5 py-1.5 text-[13px] hover:bg-bg-elev2 transition-colors`}
     >
-      {SOURCE_LABEL[source]}
-    </span>
+      <span className="font-mono font-semibold text-text">{event.ticker}</span>
+      <span className="font-mono text-[10px] text-text-dim uppercase tracking-[0.08em]">
+        {when.short}
+        {event.type !== "earnings" && (
+          <> · {TYPE_LABEL[event.type]}</>
+        )}
+      </span>
+    </Link>
   );
 }
 
-function TypeDot({ type }: { type: TimelineEvent["type"] }) {
-  const style = TYPE_STYLE[type] ?? TYPE_STYLE.other;
-  return (
-    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${style.dot}`} />
-  );
+// ---------------------------------------------------------------------------
+// Date helpers
+// ---------------------------------------------------------------------------
+
+function formatWhen(isoDate: string): { full: string; short: string } {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  const weekday = dt.toLocaleDateString(undefined, { weekday: "short" });
+  const short = dt.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return {
+    full: `${weekday} · ${short}`,
+    short: `${weekday} ${d}`,
+  };
 }
 
-function TypePill({ type }: { type: TimelineEvent["type"] }) {
-  const style = TYPE_STYLE[type] ?? TYPE_STYLE.other;
-  return (
-    <span
-      className={`px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider border border-border-subtle bg-bg-elev ${style.text}`}
-    >
-      {TYPE_LABEL[type] ?? type}
-    </span>
-  );
+function daysFromToday(isoDate: string): number {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const target = new Date(y, m - 1, d);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diff = target.getTime() - today.getTime();
+  return Math.round(diff / (1000 * 60 * 60 * 24));
 }
 
-/* ---------- empty states ---------- */
+// ---------------------------------------------------------------------------
+// Empty states
+// ---------------------------------------------------------------------------
 
-function EmptyState({ kind }: { kind: "no-watchlist" | "no-events" }) {
+function EmptyState({
+  kind,
+  scope,
+}: {
+  kind: "no-watchlist" | "no-events";
+  scope?: Scope;
+}) {
   if (kind === "no-watchlist") {
     return (
-      <div className="px-8 py-24 text-center">
-        <div className="inline-flex w-14 h-14 rounded-full bg-accent-blue/10 border border-accent-blue/30 items-center justify-center mb-5">
+      <div className="py-24 text-center">
+        <div className="inline-flex w-14 h-14 rounded-full bg-accent-green/10 border border-accent-green/30 items-center justify-center mb-5">
           <svg
             width={24}
             height={24}
             viewBox="0 0 24 24"
-            className="text-accent-blue"
+            className="text-accent-green"
             fill="none"
             stroke="currentColor"
             strokeWidth={1.8}
@@ -452,13 +705,13 @@ function EmptyState({ kind }: { kind: "no-watchlist" | "no-events" }) {
         </div>
         <h2 className="text-xl font-semibold mb-2">Calendar is empty</h2>
         <p className="text-text-dim max-w-sm mx-auto mb-6 text-sm">
-          Add companies to your watchlist to see their catalysts, FDA dates, and
-          earnings on one timeline.
+          Add companies to your watchlist to see their catalysts, FDA dates,
+          and earnings ranked by market impact.
         </p>
         <div className="flex gap-3 justify-center">
           <Link
             href="/"
-            className="px-5 py-2.5 rounded-md bg-accent-blue text-bg-app font-semibold text-sm"
+            className="px-5 py-2.5 rounded-md bg-accent-green text-bg-page font-semibold text-sm"
           >
             Find a company →
           </Link>
@@ -473,9 +726,10 @@ function EmptyState({ kind }: { kind: "no-watchlist" | "no-events" }) {
     );
   }
   return (
-    <div className="px-8 py-16 text-center">
+    <div className="py-16 text-center">
       <p className="text-text-dim text-sm">
-        No events match the current filter.
+        No events {scope ? `in ${SCOPE_LABEL[scope].toLowerCase()}` : ""}.
+        Try widening the window.
       </p>
     </div>
   );

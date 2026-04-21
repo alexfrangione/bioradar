@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BioTicker — virus capsid redraw</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-page: #08090a;
+    --bg-app: #0d1117;
+    --bg-elev: #161b22;
+    --bg-elev2: #1c2128;
+    --border: #30363d;
+    --border-subtle: #21262d;
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --text-dimmer: #6e7681;
+    --accent-green: #3fb950;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    background: var(--bg-page);
+    color: var(--text);
+    margin: 0;
+    font-family: "Geist", system-ui, sans-serif;
+  }
+  .wrap { max-width: 1300px; margin: 0 auto; padding: 48px 24px 96px; }
+  h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 8px; }
+  .subtitle { color: var(--text-dim); margin: 0 0 24px; font-size: 14px; max-width: 720px; line-height: 1.6; }
+
+  .reject-banner {
+    background: var(--bg-app);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 22px;
+    margin-bottom: 32px;
+    display: flex; align-items: center; gap: 16px;
+    opacity: 0.6;
+  }
+  .reject-banner .strike { text-decoration: line-through; }
+  .reject-label {
+    font-family: "Geist Mono", monospace;
+    font-size: 10px; color: var(--text-dimmer);
+    text-transform: uppercase; letter-spacing: 0.12em;
+  }
+
+  .combo {
+    background: var(--bg-app);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .combo-label {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 20px;
+    font-family: "Geist Mono", monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .combo-label .pill {
+    padding: 2px 8px; border-radius: 4px;
+    background: var(--bg-elev2); color: var(--text);
+    font-size: 10px; letter-spacing: 0.06em;
+  }
+  .combo-body { padding: 24px; }
+  .notes {
+    color: var(--text-dim); font-size: 13px; line-height: 1.6;
+    margin: 16px 0 0; padding: 16px 0 0;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .hero {
+    display: flex; align-items: center; justify-content: center;
+    background:
+      radial-gradient(ellipse 60% 80% at 50% 50%, rgba(63,185,80,0.06), transparent 75%),
+      var(--bg-page);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    min-height: 160px;
+    padding: 24px;
+    margin-bottom: 18px;
+  }
+
+  .nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 18px;
+  }
+  .nav .links { display: flex; gap: 22px; font-size: 13.5px; font-weight: 500; }
+  .nav .links a { color: var(--text-dim); text-decoration: none; }
+  .nav .btn {
+    font-size: 13px; font-weight: 500; color: var(--bg-page);
+    background: var(--accent-green);
+    padding: 6px 12px; border-radius: 6px;
+  }
+
+  .mark-large, .mark-nav {
+    font-family: "Geist", sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    text-transform: lowercase;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+  .mark-large { font-size: 44px; }
+  .mark-nav   { font-size: 20px; }
+  .acc-lg { display: inline-block; vertical-align: middle; margin-left: 6px; transform: translateY(-9px); }
+  .acc-sm { display: inline-block; vertical-align: middle; margin-left: 3px; transform: translateY(-5px); }
+
+  /* extra-large preview at true brand size */
+  .size-row {
+    display: flex; align-items: center; gap: 32px; justify-content: center;
+    padding: 10px 24px 0;
+    color: var(--text-dimmer);
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .size-cell { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .favicon {
+    width: 32px; height: 32px;
+    background: var(--bg-page);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Virus capsid redraw</h1>
+  <p class="subtitle">Four variations on direction 20. Same concept (virus/capsid accent at the end of the wordmark), different anatomy. Each shown at hero size, nav size, and as a standalone favicon so you can see how the shape holds up at every scale.</p>
+
+  <div class="reject-banner">
+    <span class="reject-label">Previously — rejected</span>
+    <span class="mark-nav strike">
+      bioticker
+      <svg class="acc-sm" width="13" height="13" viewBox="0 0 20 20">
+        <circle cx="10" cy="10" r="4.5" fill="#3fb950"/>
+        <g stroke="#3fb950" stroke-width="1.8" stroke-linecap="round">
+          <line x1="10" y1="5" x2="10" y2="1"/><line x1="10" y1="15" x2="10" y2="19"/>
+          <line x1="5" y1="10" x2="1" y2="10"/><line x1="15" y1="10" x2="19" y2="10"/>
+          <line x1="6.5" y1="6.5" x2="3.7" y2="3.7"/><line x1="13.5" y1="6.5" x2="16.3" y2="3.7"/>
+          <line x1="6.5" y1="13.5" x2="3.7" y2="16.3"/><line x1="13.5" y1="13.5" x2="16.3" y2="16.3"/>
+        </g>
+      </svg>
+    </span>
+  </div>
+
+  <!-- ============== 20A coronavirus clubs ============== -->
+  <div class="combo">
+    <div class="combo-label"><span class="pill">20A</span> Coronavirus — club-headed spikes (the "crown")</div>
+    <div class="combo-body">
+      <div class="hero">
+        <div class="mark-large">
+          bioticker
+          <svg class="acc-lg" width="28" height="28" viewBox="0 0 28 28">
+            <defs>
+              <g id="spike-a">
+                <line x1="14" y1="14" x2="14" y2="4" stroke="#3fb950" stroke-width="1.3" stroke-linecap="round"/>
+                <circle cx="14" cy="3" r="1.8" fill="#3fb950"/>
+              </g>
+            </defs>
+            <!-- body -->
+            <circle cx="14" cy="14" r="5" fill="#3fb950"/>
+            <!-- 10 club spikes at 36° -->
+            <use href="#spike-a"/>
+            <use href="#spike-a" transform="rotate(36 14 14)"/>
+            <use href="#spike-a" transform="rotate(72 14 14)"/>
+            <use href="#spike-a" transform="rotate(108 14 14)"/>
+            <use href="#spike-a" transform="rotate(144 14 14)"/>
+            <use href="#spike-a" transform="rotate(180 14 14)"/>
+            <use href="#spike-a" transform="rotate(216 14 14)"/>
+            <use href="#spike-a" transform="rotate(252 14 14)"/>
+            <use href="#spike-a" transform="rotate(288 14 14)"/>
+            <use href="#spike-a" transform="rotate(324 14 14)"/>
+          </svg>
+        </div>
+      </div>
+      <div class="nav">
+        <div class="mark-nav">
+          bioticker
+          <svg class="acc-sm" width="15" height="15" viewBox="0 0 28 28">
+            <defs>
+              <g id="spike-a-s">
+                <line x1="14" y1="14" x2="14" y2="4" stroke="#3fb950" stroke-width="1.8" stroke-linecap="round"/>
+                <circle cx="14" cy="3" r="2.3" fill="#3fb950"/>
+              </g>
+            </defs>
+            <circle cx="14" cy="14" r="5.5" fill="#3fb950"/>
+            <use href="#spike-a-s"/>
+            <use href="#spike-a-s" transform="rotate(36 14 14)"/>
+            <use href="#spike-a-s" transform="rotate(72 14 14)"/>
+            <use href="#spike-a-s" transform="rotate(108 14 14)"/>
+            <use href="#spike-a-s" transform="rotate(144 14 14)"/>
+            <use href="#spike-a-s" transform="rotate(180 14 14)"/>
+            <use href="#spike-a-s" transform="rotate(216 14 14)"/>
+            <use href="#spike-a-s" transform="rotate(252 14 14)"/>
+            <use href="#spike-a-s" transform="rotate(288 14 14)"/>
+            <use href="#spike-a-s" transform="rotate(324 14 14)"/>
+          </svg>
+        </div>
+        <div class="links"><a>Watchlist</a><a>Calendar</a><a>Valuation</a><a>Peers</a></div>
+        <div class="btn">Sign in</div>
+      </div>
+      <div class="size-row">
+        <div class="size-cell">
+          <div class="favicon">
+            <svg width="22" height="22" viewBox="0 0 28 28">
+              <defs>
+                <g id="spike-a-fav">
+                  <line x1="14" y1="14" x2="14" y2="4" stroke="#3fb950" stroke-width="2" stroke-linecap="round"/>
+                  <circle cx="14" cy="3" r="2.5" fill="#3fb950"/>
+                </g>
+              </defs>
+              <circle cx="14" cy="14" r="5.5" fill="#3fb950"/>
+              <use href="#spike-a-fav"/>
+              <use href="#spike-a-fav" transform="rotate(36 14 14)"/>
+              <use href="#spike-a-fav" transform="rotate(72 14 14)"/>
+              <use href="#spike-a-fav" transform="rotate(108 14 14)"/>
+              <use href="#spike-a-fav" transform="rotate(144 14 14)"/>
+              <use href="#spike-a-fav" transform="rotate(180 14 14)"/>
+              <use href="#spike-a-fav" transform="rotate(216 14 14)"/>
+              <use href="#spike-a-fav" transform="rotate(252 14 14)"/>
+              <use href="#spike-a-fav" transform="rotate(288 14 14)"/>
+              <use href="#spike-a-fav" transform="rotate(324 14 14)"/>
+            </svg>
+          </div>
+          <span>Favicon 32px</span>
+        </div>
+      </div>
+      <p class="notes">10 mushroom-topped spikes, like the spike proteins on a coronavirus. The small circles on the ends are what makes it read as "virus" instead of "sun" — those club heads are what gave "corona" (crown) its name. Most textbook-accurate, most universally recognizable.</p>
+    </div>
+  </div>
+
+  <!-- ============== 20B dense organic ============== -->
+  <div class="combo">
+    <div class="combo-label"><span class="pill">20B</span> Dense organic  (many thin spikes, no heads)</div>
+    <div class="combo-body">
+      <div class="hero">
+        <div class="mark-large">
+          bioticker
+          <svg class="acc-lg" width="28" height="28" viewBox="0 0 28 28">
+            <defs>
+              <line id="spike-b" x1="14" y1="14" x2="14" y2="1.5" stroke="#3fb950" stroke-width="1" stroke-linecap="round"/>
+            </defs>
+            <circle cx="14" cy="14" r="4.5" fill="#3fb950"/>
+            <use href="#spike-b"/>
+            <use href="#spike-b" transform="rotate(22.5 14 14)"/>
+            <use href="#spike-b" transform="rotate(45 14 14)"/>
+            <use href="#spike-b" transform="rotate(67.5 14 14)"/>
+            <use href="#spike-b" transform="rotate(90 14 14)"/>
+            <use href="#spike-b" transform="rotate(112.5 14 14)"/>
+            <use href="#spike-b" transform="rotate(135 14 14)"/>
+            <use href="#spike-b" transform="rotate(157.5 14 14)"/>
+            <use href="#spike-b" transform="rotate(180 14 14)"/>
+            <use href="#spike-b" transform="rotate(202.5 14 14)"/>
+            <use href="#spike-b" transform="rotate(225 14 14)"/>
+            <use href="#spike-b" transform="rotate(247.5 14 14)"/>
+            <use href="#spike-b" transform="rotate(270 14 14)"/>
+            <use href="#spike-b" transform="rotate(292.5 14 14)"/>
+            <use href="#spike-b" transform="rotate(315 14 14)"/>
+            <use href="#spike-b" transform="rotate(337.5 14 14)"/>
+          </svg>
+        </div>
+      </div>
+      <div class="nav">
+        <div class="mark-nav">
+          bioticker
+          <svg class="acc-sm" width="15" height="15" viewBox="0 0 28 28">
+            <defs>
+              <line id="spike-b-s" x1="14" y1="14" x2="14" y2="1" stroke="#3fb950" stroke-width="1.4" stroke-linecap="round"/>
+            </defs>
+            <circle cx="14" cy="14" r="5" fill="#3fb950"/>
+            <use href="#spike-b-s"/>
+            <use href="#spike-b-s" transform="rotate(22.5 14 14)"/>
+            <use href="#spike-b-s" transform="rotate(45 14 14)"/>
+            <use href="#spike-b-s" transform="rotate(67.5 14 14)"/>
+            <use href="#spike-b-s" transform="rotate(90 14 14)"/>
+            <use href="#spike-b-s" transform="rotate(112.5 14 14)"/>
+            <use href="#spike-b-s" transform="rotate(135 14 14)"/>
+            <use href="#spike-b-s" transform="rotate(157.5 14 14)"/>
+            <use href="#spike-b-s" transform="rotate(180 14 14)"/>
+            <use href="#spike-b-s" transform="rotate(202.5 14 14)"/>
+            <use href="#spike-b-s" transform="rotate(225 14 14)"/>
+            <use href="#spike-b-s" transform="rotate(247.5 14 14)"/>
+            <use href="#spike-b-s" transform="rotate(270 14 14)"/>
+            <use href="#spike-b-s" transform="rotate(292.5 14 14)"/>
+            <use href="#spike-b-s" transform="rotate(315 14 14)"/>
+            <use href="#spike-b-s" transform="rotate(337.5 14 14)"/>
+          </svg>
+        </div>
+        <div class="links"><a>Watchlist</a><a>Calendar</a><a>Valuation</a><a>Peers</a></div>
+        <div class="btn">Sign in</div>
+      </div>
+      <div class="size-row">
+        <div class="size-cell">
+          <div class="favicon">
+            <svg width="22" height="22" viewBox="0 0 28 28">
+              <defs>
+                <line id="spike-b-fav" x1="14" y1="14" x2="14" y2="1" stroke="#3fb950" stroke-width="1.5" stroke-linecap="round"/>
+              </defs>
+              <circle cx="14" cy="14" r="5" fill="#3fb950"/>
+              <use href="#spike-b-fav"/>
+              <use href="#spike-b-fav" transform="rotate(22.5 14 14)"/>
+              <use href="#spike-b-fav" transform="rotate(45 14 14)"/>
+              <use href="#spike-b-fav" transform="rotate(67.5 14 14)"/>
+              <use href="#spike-b-fav" transform="rotate(90 14 14)"/>
+              <use href="#spike-b-fav" transform="rotate(112.5 14 14)"/>
+              <use href="#spike-b-fav" transform="rotate(135 14 14)"/>
+              <use href="#spike-b-fav" transform="rotate(157.5 14 14)"/>
+              <use href="#spike-b-fav" transform="rotate(180 14 14)"/>
+              <use href="#spike-b-fav" transform="rotate(202.5 14 14)"/>
+              <use href="#spike-b-fav" transform="rotate(225 14 14)"/>
+              <use href="#spike-b-fav" transform="rotate(247.5 14 14)"/>
+              <use href="#spike-b-fav" transform="rotate(270 14 14)"/>
+              <use href="#spike-b-fav" transform="rotate(292.5 14 14)"/>
+              <use href="#spike-b-fav" transform="rotate(315 14 14)"/>
+              <use href="#spike-b-fav" transform="rotate(337.5 14 14)"/>
+            </svg>
+          </div>
+          <span>Favicon 32px</span>
+        </div>
+      </div>
+      <p class="notes">16 thin hair-like spikes — more of a dandelion/sea-urchin energy. Reads less as "coronavirus" specifically and more as "generic microbe." Softer, more organic than 20A.</p>
+    </div>
+  </div>
+
+  <!-- ============== 20C bacteriophage ============== -->
+  <div class="combo">
+    <div class="combo-label"><span class="pill">20C</span> Bacteriophage  (angular head + tail)</div>
+    <div class="combo-body">
+      <div class="hero">
+        <div class="mark-large">
+          bioticker
+          <svg class="acc-lg" width="22" height="30" viewBox="0 0 22 30">
+            <!-- hexagonal head -->
+            <polygon points="11,1 19,6 19,14 11,19 3,14 3,6" fill="#3fb950"/>
+            <!-- neck/collar -->
+            <rect x="9.5" y="19" width="3" height="2" fill="#3fb950"/>
+            <!-- sheath -->
+            <rect x="10" y="21" width="2" height="5" fill="#3fb950"/>
+            <!-- base plate -->
+            <rect x="8" y="26" width="6" height="1.5" fill="#3fb950"/>
+            <!-- tail fibers -->
+            <line x1="8" y1="27.5" x2="4" y2="30" stroke="#3fb950" stroke-width="1.3" stroke-linecap="round"/>
+            <line x1="11" y1="27.5" x2="11" y2="30" stroke="#3fb950" stroke-width="1.3" stroke-linecap="round"/>
+            <line x1="14" y1="27.5" x2="18" y2="30" stroke="#3fb950" stroke-width="1.3" stroke-linecap="round"/>
+          </svg>
+        </div>
+      </div>
+      <div class="nav">
+        <div class="mark-nav">
+          bioticker
+          <svg class="acc-sm" width="11" height="16" viewBox="0 0 22 30">
+            <polygon points="11,1 19,6 19,14 11,19 3,14 3,6" fill="#3fb950"/>
+            <rect x="9.5" y="19" width="3" height="2" fill="#3fb950"/>
+            <rect x="10" y="21" width="2" height="5" fill="#3fb950"/>
+            <rect x="8" y="26" width="6" height="1.8" fill="#3fb950"/>
+            <line x1="8" y1="27.5" x2="4" y2="30" stroke="#3fb950" stroke-width="1.8" stroke-linecap="round"/>
+            <line x1="11" y1="27.5" x2="11" y2="30" stroke="#3fb950" stroke-width="1.8" stroke-linecap="round"/>
+            <line x1="14" y1="27.5" x2="18" y2="30" stroke="#3fb950" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="links"><a>Watchlist</a><a>Calendar</a><a>Valuation</a><a>Peers</a></div>
+        <div class="btn">Sign in</div>
+      </div>
+      <div class="size-row">
+        <div class="size-cell">
+          <div class="favicon">
+            <svg width="16" height="22" viewBox="0 0 22 30">
+              <polygon points="11,1 19,6 19,14 11,19 3,14 3,6" fill="#3fb950"/>
+              <rect x="9.5" y="19" width="3" height="2" fill="#3fb950"/>
+              <rect x="10" y="21" width="2" height="5" fill="#3fb950"/>
+              <rect x="8" y="26" width="6" height="1.8" fill="#3fb950"/>
+              <line x1="8" y1="27.5" x2="4" y2="30" stroke="#3fb950" stroke-width="1.8" stroke-linecap="round"/>
+              <line x1="11" y1="27.5" x2="11" y2="30" stroke="#3fb950" stroke-width="1.8" stroke-linecap="round"/>
+              <line x1="14" y1="27.5" x2="18" y2="30" stroke="#3fb950" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <span>Favicon 32px</span>
+        </div>
+      </div>
+      <p class="notes">A bacteriophage — hexagonal capsid head sitting on a rigid tail with landing fibers, like a microscopic lunar lander. Impossible to mistake for anything else. Most distinctive silhouette, and bacteriophages have a legit biotech-history association (they're the poster child for phage therapy, a hot modality).</p>
+    </div>
+  </div>
+
+  <!-- ============== 20D icosahedral ============== -->
+  <div class="combo">
+    <div class="combo-label"><span class="pill">20D</span> Icosahedral capsid  (faceted 3D geometric)</div>
+    <div class="combo-body">
+      <div class="hero">
+        <div class="mark-large">
+          bioticker
+          <svg class="acc-lg" width="24" height="24" viewBox="0 0 24 24">
+            <!-- Hexagonal outline as the capsid profile -->
+            <polygon points="12,1.5 22,7 22,17 12,22.5 2,17 2,7" fill="#3fb950" stroke="#3fb950" stroke-width="1"/>
+            <!-- Inner triangulation for 3D faceted look -->
+            <line x1="2" y1="7" x2="22" y2="17" stroke="#08090a" stroke-width="0.9"/>
+            <line x1="22" y1="7" x2="2" y2="17" stroke="#08090a" stroke-width="0.9"/>
+            <line x1="12" y1="1.5" x2="12" y2="22.5" stroke="#08090a" stroke-width="0.9"/>
+          </svg>
+        </div>
+      </div>
+      <div class="nav">
+        <div class="mark-nav">
+          bioticker
+          <svg class="acc-sm" width="13" height="13" viewBox="0 0 24 24">
+            <polygon points="12,1.5 22,7 22,17 12,22.5 2,17 2,7" fill="#3fb950" stroke="#3fb950" stroke-width="1"/>
+            <line x1="2" y1="7" x2="22" y2="17" stroke="#08090a" stroke-width="1.2"/>
+            <line x1="22" y1="7" x2="2" y2="17" stroke="#08090a" stroke-width="1.2"/>
+            <line x1="12" y1="1.5" x2="12" y2="22.5" stroke="#08090a" stroke-width="1.2"/>
+          </svg>
+        </div>
+        <div class="links"><a>Watchlist</a><a>Calendar</a><a>Valuation</a><a>Peers</a></div>
+        <div class="btn">Sign in</div>
+      </div>
+      <div class="size-row">
+        <div class="size-cell">
+          <div class="favicon">
+            <svg width="20" height="20" viewBox="0 0 24 24">
+              <polygon points="12,1.5 22,7 22,17 12,22.5 2,17 2,7" fill="#3fb950" stroke="#3fb950" stroke-width="1"/>
+              <line x1="2" y1="7" x2="22" y2="17" stroke="#08090a" stroke-width="1.4"/>
+              <line x1="22" y1="7" x2="2" y2="17" stroke="#08090a" stroke-width="1.4"/>
+              <line x1="12" y1="1.5" x2="12" y2="22.5" stroke="#08090a" stroke-width="1.4"/>
+            </svg>
+          </div>
+          <span>Favicon 32px</span>
+        </div>
+      </div>
+      <p class="notes">Most viruses (adenoviruses, polio, HIV core) are actually icosahedral — 20 triangular faces. This one shows the hexagonal profile with the internal triangulation lines that suggest the 3D structure. Geometric, calm, looks architectural. Least "spiky ball," most "crystalline capsid."</p>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BioTicker — calendar variants</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-page: #08090a;
+    --bg-app: #0d1117;
+    --bg-elev: #161b22;
+    --bg-elev2: #1c2128;
+    --border: #30363d;
+    --border-subtle: #21262d;
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --text-dimmer: #6e7681;
+    --accent-green: #3fb950;
+    --accent-red: #f85149;
+    --accent-amber: #d29922;
+    --accent-blue: #58a6ff;
+    --accent-purple: #bc8cff;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    background: var(--bg-page);
+    color: var(--text);
+    margin: 0;
+    font-family: "Geist", system-ui, sans-serif;
+    font-feature-settings: "ss01", "ss03";
+  }
+  .page { max-width: 1280px; margin: 0 auto; padding: 40px 24px 80px; }
+  .page-title { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 4px; }
+  .page-sub { color: var(--text-dim); font-size: 14px; margin: 0 0 36px; max-width: 760px; line-height: 1.6; }
+
+  .variant { margin-bottom: 36px; background: var(--bg-app); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+  .v-label {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 20px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    font-family: "Geist Mono", monospace;
+    font-size: 11px; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .v-label .pill {
+    padding: 2px 8px; border-radius: 4px;
+    background: var(--bg-elev2); color: var(--text);
+    font-size: 10px; letter-spacing: 0.06em;
+  }
+  .v-body { padding: 28px 32px; }
+  .v-notes {
+    color: var(--text-dim); font-size: 13px; line-height: 1.6;
+    padding: 14px 22px 18px;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .v-notes strong { color: var(--text); font-weight: 600; }
+
+  /* Shared calendar header */
+  .cal-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .cal-title {
+    font-family: "Geist Mono", monospace;
+    font-size: 11px; color: var(--text-dim);
+    letter-spacing: 0.14em; text-transform: uppercase;
+  }
+  .cal-legend {
+    display: flex; gap: 14px; font-family: "Geist Mono", monospace;
+    font-size: 10px; color: var(--text-dim);
+    letter-spacing: 0.06em;
+  }
+  .cal-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .cal-legend span::before { content: ""; width: 7px; height: 7px; border-radius: 1px; }
+  .cal-legend .pdufa::before    { background: var(--accent-amber); }
+  .cal-legend .adcom::before    { background: var(--accent-blue); }
+  .cal-legend .readout::before  { background: var(--accent-purple); }
+  .cal-legend .earnings::before { background: var(--accent-green); }
+
+  /* =================================================================== */
+  /* VARIANT A — AGENDA LIST (vertical, day-grouped)                      */
+  /* =================================================================== */
+  .agenda { display: grid; gap: 0; }
+  .agenda .day-row {
+    display: grid; grid-template-columns: 160px 1fr;
+    gap: 28px; align-items: start;
+    padding: 14px 0;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .agenda .day-row:first-child { border-top: 0; }
+  .agenda .day-row.today .day-label strong { color: var(--accent-green); }
+  .agenda .day-row.weekend { opacity: .45; }
+  .agenda .day-label {
+    font-family: "Geist Mono", monospace;
+    font-size: 11px; color: var(--text-dim);
+    letter-spacing: 0.14em; text-transform: uppercase;
+    padding-top: 6px;
+  }
+  .agenda .day-label strong {
+    display: block; font-size: 22px; color: var(--text);
+    letter-spacing: -0.01em; font-weight: 600;
+    margin-top: 2px;
+  }
+  .agenda .events { display: grid; gap: 6px; }
+  .agenda .evt {
+    display: grid; grid-template-columns: 88px 70px 1fr;
+    gap: 14px; align-items: center;
+    padding: 8px 12px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border-subtle);
+    border-left: 3px solid;
+    border-radius: 6px;
+    font-size: 13px;
+  }
+  .agenda .evt.pdufa    { border-left-color: var(--accent-amber); }
+  .agenda .evt.adcom    { border-left-color: var(--accent-blue); }
+  .agenda .evt.readout  { border-left-color: var(--accent-purple); }
+  .agenda .evt.earnings { border-left-color: var(--accent-green); }
+  .agenda .evt .tag {
+    font-family: "Geist Mono", monospace;
+    font-size: 10px; font-weight: 500;
+    letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .agenda .evt.pdufa    .tag { color: var(--accent-amber); }
+  .agenda .evt.adcom    .tag { color: var(--accent-blue); }
+  .agenda .evt.readout  .tag { color: var(--accent-purple); }
+  .agenda .evt.earnings .tag { color: var(--accent-green); }
+  .agenda .evt .tkr {
+    font-family: "Geist Mono", monospace;
+    font-weight: 600; color: var(--text);
+  }
+  .agenda .evt .ttl { color: var(--text-dim); }
+
+  /* =================================================================== */
+  /* VARIANT B — HORIZONTAL TIMELINE                                      */
+  /* =================================================================== */
+  .tl-wrap { position: relative; padding: 12px 0 4px; }
+  .tl-axis {
+    position: relative;
+    display: grid; grid-template-columns: repeat(7, 1fr);
+    padding-top: 28px;
+  }
+  .tl-axis::before {
+    content: ""; position: absolute;
+    top: 22px; left: 4%; right: 4%;
+    height: 1px; background: var(--border);
+  }
+  .tl-day {
+    position: relative;
+    display: flex; flex-direction: column;
+    align-items: center;
+    padding: 0 8px;
+  }
+  .tl-day::before {
+    content: ""; position: absolute;
+    top: -36px; left: 50%; transform: translateX(-50%);
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--bg-elev); border: 1px solid var(--border);
+  }
+  .tl-day.today::before {
+    background: var(--accent-green); border-color: var(--accent-green);
+    box-shadow: 0 0 0 3px rgba(63,185,80,.15);
+  }
+  .tl-day.weekend { opacity: .5; }
+  .tl-day .d-date {
+    position: absolute; top: -62px; left: 50%; transform: translateX(-50%);
+    font-family: "Geist Mono", monospace;
+    font-size: 10px; color: var(--text-dim);
+    letter-spacing: 0.1em; text-transform: uppercase;
+    white-space: nowrap;
+    text-align: center;
+  }
+  .tl-day.today .d-date { color: var(--accent-green); }
+  .tl-day .d-date b {
+    display: block; color: var(--text); font-weight: 600;
+    font-size: 13px; margin-top: 2px; letter-spacing: 0;
+  }
+  .tl-day.today .d-date b { color: var(--accent-green); }
+  .tl-day .stack {
+    display: grid; gap: 4px; width: 100%;
+    padding-top: 14px;
+  }
+  .tl-pill {
+    background: var(--bg-elev);
+    border-left: 3px solid;
+    border-radius: 4px;
+    padding: 5px 8px;
+    font-size: 11.5px;
+    display: flex; align-items: center; gap: 6px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .tl-pill.pdufa    { border-left-color: var(--accent-amber); }
+  .tl-pill.adcom    { border-left-color: var(--accent-blue); }
+  .tl-pill.readout  { border-left-color: var(--accent-purple); }
+  .tl-pill.earnings { border-left-color: var(--accent-green); }
+  .tl-pill .tkr {
+    font-family: "Geist Mono", monospace; font-weight: 600;
+    color: var(--text); font-size: 11.5px;
+  }
+  .tl-pill .ttl { color: var(--text-dim); font-size: 11px; }
+
+  /* =================================================================== */
+  /* VARIANT C — TERMINAL TABLE                                           */
+  /* =================================================================== */
+  .term {
+    font-family: "Geist Mono", monospace;
+    font-size: 12.5px;
+    background: var(--bg-page);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .term-row {
+    display: grid;
+    grid-template-columns: 90px 90px 100px 1fr auto;
+    gap: 16px;
+    padding: 9px 18px;
+    border-top: 1px solid var(--border-subtle);
+    align-items: center;
+  }
+  .term-row:first-child { border-top: 0; }
+  .term-row.hdr {
+    background: var(--bg-elev);
+    color: var(--text-dim);
+    font-size: 10px;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    font-weight: 500;
+    padding: 10px 18px;
+  }
+  .term-row.today {
+    background: rgba(63,185,80,.03);
+  }
+  .term-row.new-day { border-top: 1px solid var(--border); }
+  .term-row .date { color: var(--text-dim); }
+  .term-row.today .date { color: var(--accent-green); font-weight: 600; }
+  .term-row .tkr { font-weight: 600; color: var(--text); }
+  .term-row .type {
+    font-size: 10px; text-transform: uppercase;
+    letter-spacing: 0.08em; font-weight: 500;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .term-row .type::before {
+    content: ""; width: 7px; height: 7px; border-radius: 1px;
+  }
+  .term-row .type.pdufa    { color: var(--accent-amber); }
+  .term-row .type.pdufa::before    { background: var(--accent-amber); }
+  .term-row .type.adcom    { color: var(--accent-blue); }
+  .term-row .type.adcom::before    { background: var(--accent-blue); }
+  .term-row .type.readout  { color: var(--accent-purple); }
+  .term-row .type.readout::before  { background: var(--accent-purple); }
+  .term-row .type.earnings { color: var(--accent-green); }
+  .term-row .type.earnings::before { background: var(--accent-green); }
+  .term-row .evt { color: var(--text); font-family: "Geist", sans-serif; font-size: 13px; }
+  .term-row .tme { color: var(--text-dimmer); font-size: 10.5px; }
+
+  /* =================================================================== */
+  /* VARIANT D — TIER-BASED EDITORIAL                                     */
+  /* =================================================================== */
+  .tiers { display: grid; gap: 20px; }
+  .tier-head {
+    display: flex; align-items: center; gap: 12px;
+    font-family: "Geist Mono", monospace;
+    font-size: 11px; color: var(--text-dim);
+    letter-spacing: 0.14em; text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .tier-head .bar {
+    flex: 1; height: 1px; background: var(--border-subtle);
+  }
+  .tier-head .count {
+    background: var(--bg-elev2); color: var(--text);
+    padding: 1px 8px; border-radius: 4px;
+    font-size: 10px; letter-spacing: 0.06em;
+  }
+
+  .tier-a .tier-head .lbl { color: var(--accent-amber); }
+  .tier-a-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  }
+  .tier-a-card {
+    background: var(--bg-elev);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 18px;
+    display: grid; gap: 10px;
+    position: relative;
+    overflow: hidden;
+  }
+  .tier-a-card::after {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  }
+  .tier-a-card.pdufa::after { background: var(--accent-amber); }
+  .tier-a-card.adcom::after { background: var(--accent-blue); }
+  .tier-a-card .top {
+    display: flex; align-items: center; gap: 10px;
+    font-family: "Geist Mono", monospace; font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.1em;
+  }
+  .tier-a-card.pdufa .top .type { color: var(--accent-amber); }
+  .tier-a-card.adcom .top .type { color: var(--accent-blue); }
+  .tier-a-card .top .when { color: var(--text-dim); }
+  .tier-a-card .ticker-row { display: flex; align-items: baseline; gap: 10px; }
+  .tier-a-card .tkr {
+    font-family: "Geist Mono", monospace; font-weight: 600;
+    font-size: 22px; color: var(--text);
+  }
+  .tier-a-card .name { color: var(--text-dim); font-size: 13px; }
+  .tier-a-card .evt { font-size: 14.5px; font-weight: 500; color: var(--text); }
+  .tier-a-card .blurb { color: var(--text-dim); font-size: 12.5px; line-height: 1.5; }
+
+  .tier-b-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .tier-b-card {
+    background: var(--bg-elev);
+    border-left: 3px solid var(--accent-purple);
+    border-radius: 8px;
+    padding: 12px 14px;
+    display: grid; gap: 4px;
+  }
+  .tier-b-card .top {
+    display: flex; justify-content: space-between;
+    font-family: "Geist Mono", monospace; font-size: 10px;
+    color: var(--text-dim); letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .tier-b-card .tkr-line {
+    display: flex; align-items: baseline; gap: 8px;
+  }
+  .tier-b-card .tkr {
+    font-family: "Geist Mono", monospace; font-weight: 600;
+    color: var(--text); font-size: 14px;
+  }
+  .tier-b-card .ttl { color: var(--text-dim); font-size: 12.5px; }
+
+  .tier-c-row {
+    display: flex; flex-wrap: wrap; gap: 8px;
+  }
+  .tier-c-chip {
+    background: var(--bg-elev);
+    border: 1px solid var(--border-subtle);
+    border-left: 3px solid var(--accent-green);
+    border-radius: 999px;
+    padding: 6px 14px 6px 12px;
+    font-size: 12.5px;
+    display: inline-flex; gap: 8px; align-items: baseline;
+  }
+  .tier-c-chip .tkr { font-family: "Geist Mono", monospace; font-weight: 600; }
+  .tier-c-chip .day {
+    font-family: "Geist Mono", monospace; font-size: 10px;
+    color: var(--text-dim); letter-spacing: 0.08em; text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1 class="page-title">Calendar — four alternate layouts</h1>
+  <p class="page-sub">Same catalyst data, four different ways to slice it. Each variant is drop-in-replaceable for the 7-day grid you already liked — so we can keep that one as the default and revisit any of these if we want a different feel.</p>
+
+  <!-- =================================================================== -->
+  <!-- VARIANT A — AGENDA LIST                                              -->
+  <!-- =================================================================== -->
+  <div class="variant">
+    <div class="v-label">
+      <span><span class="pill">A</span> &nbsp;Agenda list — vertical schedule</span>
+      <span>Day header on the left, events on the right</span>
+    </div>
+    <div class="v-body">
+      <div class="cal-head">
+        <div class="cal-title">Catalysts · next 7 days</div>
+        <div class="cal-legend">
+          <span class="pdufa">PDUFA</span>
+          <span class="adcom">AdCom</span>
+          <span class="readout">Readout</span>
+          <span class="earnings">Earnings</span>
+        </div>
+      </div>
+
+      <div class="agenda">
+        <div class="day-row today">
+          <div class="day-label">Mon · today<strong>Apr 21</strong></div>
+          <div class="events">
+            <div class="evt earnings"><span class="tag">Earnings</span><span class="tkr">ISRG</span><span class="ttl">Q1 2026 report</span></div>
+            <div class="evt readout"><span class="tag">Ph2</span><span class="tkr">ARWR</span><span class="ttl">Plozasiran HTG data</span></div>
+          </div>
+        </div>
+        <div class="day-row">
+          <div class="day-label">Tue<strong>Apr 22</strong></div>
+          <div class="events">
+            <div class="evt earnings"><span class="tag">Earnings</span><span class="tkr">JNJ</span><span class="ttl">Q1 2026</span></div>
+            <div class="evt pdufa"><span class="tag">PDUFA</span><span class="tkr">INSM</span><span class="ttl">Brensocatib · bronchiectasis</span></div>
+          </div>
+        </div>
+        <div class="day-row">
+          <div class="day-label">Wed<strong>Apr 23</strong></div>
+          <div class="events">
+            <div class="evt readout"><span class="tag">Ph1/2</span><span class="tkr">BEAM</span><span class="ttl">BEACON sickle cell cohort</span></div>
+            <div class="evt readout"><span class="tag">Data</span><span class="tkr">CRSP</span><span class="ttl">Exa-cel 24-mo durability</span></div>
+          </div>
+        </div>
+        <div class="day-row">
+          <div class="day-label">Thu<strong>Apr 24</strong></div>
+          <div class="events">
+            <div class="evt adcom"><span class="tag">AdCom</span><span class="tkr">SRPT</span><span class="ttl">Elevidys label expansion</span></div>
+            <div class="evt earnings"><span class="tag">Earnings</span><span class="tkr">BMY</span><span class="ttl">Q1 2026</span></div>
+          </div>
+        </div>
+        <div class="day-row">
+          <div class="day-label">Fri<strong>Apr 25</strong></div>
+          <div class="events">
+            <div class="evt pdufa"><span class="tag">PDUFA</span><span class="tkr">MRNA</span><span class="ttl">mRNA-1083 flu/COVID combo</span></div>
+            <div class="evt earnings"><span class="tag">Earnings</span><span class="tkr">VRTX</span><span class="ttl">Q1 2026 &amp; guidance</span></div>
+          </div>
+        </div>
+        <div class="day-row weekend">
+          <div class="day-label">Sun<strong>Apr 27</strong></div>
+          <div class="events">
+            <div class="evt readout"><span class="tag">Data</span><span class="tkr">REGN</span><span class="ttl">Libtayo KN-724 update</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="v-notes">
+      <strong>Feel:</strong> Calendar-app "schedule view." Long titles breathe; date is a prominent anchor on the left. <strong>Best for:</strong> readability, mobile, days with many events. Empty days don't take up equal real estate. <strong>Tradeoff:</strong> taller overall — needs more vertical space than the grid.
+    </div>
+  </div>
+
+  <!-- =================================================================== -->
+  <!-- VARIANT B — HORIZONTAL TIMELINE                                      -->
+  <!-- =================================================================== -->
+  <div class="variant">
+    <div class="v-label">
+      <span><span class="pill">B</span> &nbsp;Timeline strip — horizontal axis</span>
+      <span>Dates along a line, events stack below each</span>
+    </div>
+    <div class="v-body">
+      <div class="cal-head">
+        <div class="cal-title">Catalysts · next 7 days</div>
+        <div class="cal-legend">
+          <span class="pdufa">PDUFA</span>
+          <span class="adcom">AdCom</span>
+          <span class="readout">Readout</span>
+          <span class="earnings">Earnings</span>
+        </div>
+      </div>
+      <div class="tl-wrap">
+        <div class="tl-axis">
+          <div class="tl-day today">
+            <span class="d-date">Mon<b>21</b></span>
+            <div class="stack">
+              <span class="tl-pill earnings"><span class="tkr">ISRG</span><span class="ttl">Q1</span></span>
+              <span class="tl-pill readout"><span class="tkr">ARWR</span><span class="ttl">Plozasiran</span></span>
+            </div>
+          </div>
+          <div class="tl-day">
+            <span class="d-date">Tue<b>22</b></span>
+            <div class="stack">
+              <span class="tl-pill earnings"><span class="tkr">JNJ</span><span class="ttl">Q1</span></span>
+              <span class="tl-pill pdufa"><span class="tkr">INSM</span><span class="ttl">Brensocatib</span></span>
+            </div>
+          </div>
+          <div class="tl-day">
+            <span class="d-date">Wed<b>23</b></span>
+            <div class="stack">
+              <span class="tl-pill readout"><span class="tkr">BEAM</span><span class="ttl">BEACON</span></span>
+              <span class="tl-pill readout"><span class="tkr">CRSP</span><span class="ttl">Exa-cel</span></span>
+            </div>
+          </div>
+          <div class="tl-day">
+            <span class="d-date">Thu<b>24</b></span>
+            <div class="stack">
+              <span class="tl-pill adcom"><span class="tkr">SRPT</span><span class="ttl">Elevidys</span></span>
+              <span class="tl-pill earnings"><span class="tkr">BMY</span><span class="ttl">Q1</span></span>
+            </div>
+          </div>
+          <div class="tl-day">
+            <span class="d-date">Fri<b>25</b></span>
+            <div class="stack">
+              <span class="tl-pill pdufa"><span class="tkr">MRNA</span><span class="ttl">mRNA-1083</span></span>
+              <span class="tl-pill earnings"><span class="tkr">VRTX</span><span class="ttl">Q1</span></span>
+            </div>
+          </div>
+          <div class="tl-day weekend">
+            <span class="d-date">Sat<b>26</b></span>
+            <div class="stack"></div>
+          </div>
+          <div class="tl-day weekend">
+            <span class="d-date">Sun<b>27</b></span>
+            <div class="stack">
+              <span class="tl-pill readout"><span class="tkr">REGN</span><span class="ttl">Libtayo</span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="v-notes">
+      <strong>Feel:</strong> Events sit on a horizontal date axis, with a pulsing "today" dot. Reads like a Gantt chart's cousin. <strong>Best for:</strong> showing density and drift over time — you can feel "Thu–Fri is heavy" at a glance. <strong>Tradeoff:</strong> same width per day, so Sat still costs real estate even when empty; titles have to stay short.
+    </div>
+  </div>
+
+  <!-- =================================================================== -->
+  <!-- VARIANT C — TERMINAL TABLE                                           -->
+  <!-- =================================================================== -->
+  <div class="variant">
+    <div class="v-label">
+      <span><span class="pill">C</span> &nbsp;Terminal table — dense rows</span>
+      <span>Bloomberg-style spreadsheet</span>
+    </div>
+    <div class="v-body">
+      <div class="cal-head">
+        <div class="cal-title">Catalysts · next 7 days</div>
+        <div class="cal-legend">
+          <span class="pdufa">PDUFA</span>
+          <span class="adcom">AdCom</span>
+          <span class="readout">Readout</span>
+          <span class="earnings">Earnings</span>
+        </div>
+      </div>
+      <div class="term">
+        <div class="term-row hdr"><span>Date</span><span>Ticker</span><span>Type</span><span>Event</span><span>Time</span></div>
+
+        <div class="term-row today"><span class="date">21 · Mon</span><span class="tkr">ISRG</span><span class="type earnings">Earnings</span><span class="evt">Q1 2026 report</span><span class="tme">AMC</span></div>
+        <div class="term-row today"><span class="date">21 · Mon</span><span class="tkr">ARWR</span><span class="type readout">Ph2 Readout</span><span class="evt">Plozasiran HTG data</span><span class="tme">—</span></div>
+
+        <div class="term-row new-day"><span class="date">22 · Tue</span><span class="tkr">JNJ</span><span class="type earnings">Earnings</span><span class="evt">Q1 2026</span><span class="tme">BMO</span></div>
+        <div class="term-row"><span class="date">22 · Tue</span><span class="tkr">INSM</span><span class="type pdufa">PDUFA</span><span class="evt">Brensocatib · bronchiectasis decision</span><span class="tme">—</span></div>
+
+        <div class="term-row new-day"><span class="date">23 · Wed</span><span class="tkr">BEAM</span><span class="type readout">Ph1/2</span><span class="evt">BEACON sickle cell cohort</span><span class="tme">—</span></div>
+        <div class="term-row"><span class="date">23 · Wed</span><span class="tkr">CRSP</span><span class="type readout">Data</span><span class="evt">Exa-cel 24-mo durability (ASCO abs)</span><span class="tme">—</span></div>
+
+        <div class="term-row new-day"><span class="date">24 · Thu</span><span class="tkr">SRPT</span><span class="type adcom">AdCom</span><span class="evt">Elevidys label expansion</span><span class="tme">14:00</span></div>
+        <div class="term-row"><span class="date">24 · Thu</span><span class="tkr">BMY</span><span class="type earnings">Earnings</span><span class="evt">Q1 2026</span><span class="tme">AMC</span></div>
+
+        <div class="term-row new-day"><span class="date">25 · Fri</span><span class="tkr">MRNA</span><span class="type pdufa">PDUFA</span><span class="evt">mRNA-1083 flu/COVID combo</span><span class="tme">—</span></div>
+        <div class="term-row"><span class="date">25 · Fri</span><span class="tkr">VRTX</span><span class="type earnings">Earnings</span><span class="evt">Q1 2026 &amp; guidance</span><span class="tme">BMO</span></div>
+
+        <div class="term-row new-day"><span class="date">27 · Sun</span><span class="tkr">REGN</span><span class="type readout">Data</span><span class="evt">Libtayo KN-724 update (AACR)</span><span class="tme">—</span></div>
+      </div>
+    </div>
+    <div class="v-notes">
+      <strong>Feel:</strong> Bloomberg. Maximum density. Monospace columns, every event one scannable row. <strong>Best for:</strong> power users. Fits a lot of events in very little vertical space. <strong>Tradeoff:</strong> least friendly to new visitors; the grid and agenda variants are warmer on a landing page.
+    </div>
+  </div>
+
+  <!-- =================================================================== -->
+  <!-- VARIANT D — TIER-BASED EDITORIAL                                     -->
+  <!-- =================================================================== -->
+  <div class="variant">
+    <div class="v-label">
+      <span><span class="pill">D</span> &nbsp;Tier-based — editorial ranking</span>
+      <span>What matters most, what happens next, background noise</span>
+    </div>
+    <div class="v-body">
+      <div class="cal-head">
+        <div class="cal-title">Catalysts · this week</div>
+        <div class="cal-legend">
+          <span class="pdufa">PDUFA</span>
+          <span class="adcom">AdCom</span>
+          <span class="readout">Readout</span>
+          <span class="earnings">Earnings</span>
+        </div>
+      </div>
+      <div class="tiers">
+        <!-- Tier A: high impact -->
+        <div class="tier-a">
+          <div class="tier-head">
+            <span class="lbl">High impact</span>
+            <span class="count">2</span>
+            <span class="bar"></span>
+          </div>
+          <div class="tier-a-grid">
+            <div class="tier-a-card adcom">
+              <div class="top"><span class="type">AdCom</span><span class="when">Thu · Apr 24</span></div>
+              <div class="ticker-row"><span class="tkr">SRPT</span><span class="name">Sarepta Therapeutics</span></div>
+              <div class="evt">Elevidys label expansion</div>
+              <div class="blurb">Non-ambulatory DMD cohort — outcome likely dictates the drug's peak sales scenario.</div>
+            </div>
+            <div class="tier-a-card pdufa">
+              <div class="top"><span class="type">PDUFA</span><span class="when">Fri · Apr 25</span></div>
+              <div class="ticker-row"><span class="tkr">MRNA</span><span class="name">Moderna</span></div>
+              <div class="evt">mRNA-1083 flu/COVID combo</div>
+              <div class="blurb">First combination respiratory vaccine decision; read-through for the broader pipeline's commercial narrative.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tier B: clinical readouts -->
+        <div class="tier-b">
+          <div class="tier-head">
+            <span class="lbl" style="color: var(--accent-purple);">Clinical readouts</span>
+            <span class="count">3</span>
+            <span class="bar"></span>
+          </div>
+          <div class="tier-b-grid">
+            <div class="tier-b-card">
+              <div class="top"><span>Ph1/2 · BEACON</span><span>Wed 23</span></div>
+              <div class="tkr-line"><span class="tkr">BEAM</span></div>
+              <div class="ttl">Sickle cell cohort data</div>
+            </div>
+            <div class="tier-b-card">
+              <div class="top"><span>Data · ASCO abs</span><span>Wed 23</span></div>
+              <div class="tkr-line"><span class="tkr">CRSP</span></div>
+              <div class="ttl">Exa-cel 24-mo durability</div>
+            </div>
+            <div class="tier-b-card">
+              <div class="top"><span>Ph2 · Plozasiran</span><span>Mon 21</span></div>
+              <div class="tkr-line"><span class="tkr">ARWR</span></div>
+              <div class="ttl">HTG data</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tier C: earnings -->
+        <div class="tier-c">
+          <div class="tier-head">
+            <span class="lbl" style="color: var(--accent-green);">Earnings</span>
+            <span class="count">4</span>
+            <span class="bar"></span>
+          </div>
+          <div class="tier-c-row">
+            <span class="tier-c-chip"><span class="tkr">ISRG</span><span class="day">Mon AMC</span></span>
+            <span class="tier-c-chip"><span class="tkr">JNJ</span><span class="day">Tue BMO</span></span>
+            <span class="tier-c-chip"><span class="tkr">BMY</span><span class="day">Thu AMC</span></span>
+            <span class="tier-c-chip"><span class="tkr">VRTX</span><span class="day">Fri BMO</span></span>
+          </div>
+        </div>
+
+        <!-- Tier D: other -->
+        <div class="tier-c">
+          <div class="tier-head">
+            <span class="lbl">Also this week</span>
+            <span class="count">1</span>
+            <span class="bar"></span>
+          </div>
+          <div class="tier-c-row">
+            <span class="tier-c-chip" style="border-left-color: var(--accent-purple);">
+              <span class="tkr">INSM</span><span class="day">Tue · PDUFA Brensocatib</span>
+            </span>
+            <span class="tier-c-chip" style="border-left-color: var(--accent-purple);">
+              <span class="tkr">REGN</span><span class="day">Sun · Libtayo data</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="v-notes">
+      <strong>Feel:</strong> Editorial — not chronological. Big-deal events get big cards, readouts get medium tiles, earnings and routine items get compact chips. <strong>Best for:</strong> signaling which catalysts actually move markets; makes the product feel curated rather than aggregated. <strong>Tradeoff:</strong> someone has to decide what's "high impact" — that's a product choice to get right (probably driven by market cap × event type × expected volatility).
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

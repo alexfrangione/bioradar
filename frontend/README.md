@@ -1,4 +1,4 @@
-# BioRadar frontend
+# BioTicker frontend
 
 Next.js 14 (App Router) + Tailwind CSS.
 

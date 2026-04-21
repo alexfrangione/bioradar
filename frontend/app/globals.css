@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -16,21 +16,50 @@ body {
 
 body {
   font-family:
-    "Inter",
+    "Geist",
     -apple-system,
     BlinkMacSystemFont,
     system-ui,
     sans-serif;
   min-height: 100vh;
   font-feature-settings:
-    "cv02",
-    "cv03",
-    "cv04",
-    "cv11";
+    "ss01",
+    "ss03";
 }
 
 .num,
 .mono {
-  font-family: "JetBrains Mono", Consolas, monospace;
+  font-family: "Geist Mono", "JetBrains Mono", Consolas, monospace;
   font-variant-numeric: tabular-nums;
+}
+
+/* ---- landing hero animations ---- */
+
+@keyframes bt-tape {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.bt-tape-inner {
+  animation: bt-tape 60s linear infinite;
+}
+
+@keyframes bt-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(63, 185, 80, 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(63, 185, 80, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(63, 185, 80, 0);
+  }
+}
+
+.bt-pulse-dot {
+  animation: bt-pulse 2s infinite;
 }

@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BioTicker — round 2 wordmarks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-page: #08090a;
+    --bg-app: #0d1117;
+    --bg-elev: #161b22;
+    --bg-elev2: #1c2128;
+    --border: #30363d;
+    --border-subtle: #21262d;
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --text-dimmer: #6e7681;
+    --accent-green: #3fb950;
+    --accent-green-2: #2ea043;
+    --accent-red: #f85149;
+    --accent-blue: #58a6ff;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    background: var(--bg-page);
+    color: var(--text);
+    margin: 0;
+    font-family: "Geist", "Inter", system-ui, sans-serif;
+  }
+  .wrap { max-width: 1300px; margin: 0 auto; padding: 48px 24px 96px; }
+  h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 8px; }
+  .subtitle { color: var(--text-dim); margin: 0 0 24px; font-size: 14px; max-width: 720px; line-height: 1.6; }
+  .leader {
+    background: var(--bg-app);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 22px;
+    margin-bottom: 48px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px;
+  }
+  .leader-left { display: flex; align-items: center; gap: 14px; }
+  .leader-label {
+    font-family: "Geist Mono", monospace;
+    font-size: 10px; color: var(--text-dimmer);
+    text-transform: uppercase; letter-spacing: 0.12em;
+  }
+  .leader-mark {
+    font-family: "Geist", sans-serif;
+    font-weight: 600;
+    font-size: 22px;
+    letter-spacing: -0.04em;
+    text-transform: lowercase;
+  }
+  .leader-mark .dot {
+    display: inline-block; width: 7px; height: 7px;
+    background: var(--accent-green); border-radius: 50%;
+    vertical-align: middle; margin-left: 2px; transform: translateY(-5px);
+  }
+
+  /* combo card */
+  .combo {
+    background: var(--bg-app);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .combo-label {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 20px;
+    font-family: "Geist Mono", monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .combo-label .pill {
+    padding: 2px 8px; border-radius: 4px;
+    background: var(--bg-elev2); color: var(--text);
+    font-size: 10px; letter-spacing: 0.06em;
+  }
+  .combo-body { padding: 24px; }
+  .notes {
+    color: var(--text-dim); font-size: 13px; line-height: 1.6;
+    margin: 16px 0 0; padding: 16px 0 0;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .hero {
+    display: flex; align-items: center; justify-content: center;
+    background:
+      radial-gradient(ellipse 60% 80% at 50% 50%, rgba(63,185,80,0.06), transparent 75%),
+      var(--bg-page);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    min-height: 160px;
+    padding: 24px;
+    margin-bottom: 18px;
+  }
+
+  /* nav */
+  .nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  .nav .links { display: flex; gap: 22px; font-size: 13.5px; font-weight: 500; font-family: "Geist", sans-serif; }
+  .nav .links a { color: var(--text-dim); text-decoration: none; }
+  .nav .btn {
+    font-size: 13px; font-weight: 500; color: var(--bg-page);
+    background: var(--accent-green);
+    padding: 6px 12px; border-radius: 6px;
+    font-family: "Geist", sans-serif;
+  }
+
+  /* =========== DIRECTION 7 — pill/capsule mark =========== */
+  .d7-large, .d7-nav {
+    display: inline-flex; align-items: center; gap: 14px;
+    font-family: "Geist", sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .d7-large { font-size: 32px; }
+  .d7-nav   { font-size: 18px; }
+
+  /* =========== DIRECTION 8 — integrated tick on the "i" =========== */
+  .d8-large, .d8-nav {
+    font-family: "Geist", sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    text-transform: lowercase;
+    position: relative;
+    display: inline-block;
+  }
+  .d8-large { font-size: 40px; }
+  .d8-nav   { font-size: 22px; }
+  .d8-large .tickmark, .d8-nav .tickmark {
+    color: var(--accent-green);
+    display: inline-block;
+    position: relative;
+    top: -0.05em;
+  }
+
+  /* =========== DIRECTION 9 — Bt monogram with helix spine =========== */
+  .d9-large, .d9-nav {
+    display: inline-flex; align-items: center; gap: 14px;
+    font-family: "Geist", sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+  }
+  .d9-large { font-size: 30px; }
+  .d9-nav { font-size: 18px; }
+
+  /* =========== DIRECTION 10 — stacked mono block =========== */
+  .d10-large {
+    font-family: "Geist Mono", "JetBrains Mono", monospace;
+    font-weight: 700;
+    line-height: 0.98;
+    letter-spacing: 0.02em;
+    font-size: 38px;
+    background: var(--accent-green);
+    color: var(--bg-page);
+    padding: 12px 18px;
+    border-radius: 10px;
+    display: inline-block;
+  }
+  .d10-nav {
+    font-family: "Geist Mono", monospace;
+    font-weight: 700;
+    line-height: 0.98;
+    letter-spacing: 0.02em;
+    font-size: 11px;
+    background: var(--accent-green);
+    color: var(--bg-page);
+    padding: 6px 8px;
+    border-radius: 5px;
+    display: inline-block;
+  }
+
+  /* =========== DIRECTION 11 — negative space B mark =========== */
+  .d11-large, .d11-nav {
+    display: inline-flex; align-items: center; gap: 14px;
+    font-family: "Geist", sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+  }
+  .d11-large { font-size: 30px; }
+  .d11-nav   { font-size: 18px; }
+
+  /* =========== DIRECTION 12 — chart-line underline =========== */
+  .d12-large, .d12-nav {
+    font-family: "Geist", sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    display: inline-block;
+    position: relative;
+  }
+  .d12-large { font-size: 38px; padding-bottom: 14px; }
+  .d12-nav   { font-size: 20px; padding-bottom: 8px; }
+  .d12-large svg, .d12-nav svg {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    width: 100%;
+  }
+
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>BioTicker — round 2 wordmarks</h1>
+    <p class="subtitle">Six directions you haven't seen. All paired against <strong>type B</strong> (Geist + Geist Mono) to keep things consistent with your current lean. Asking: does any of these beat your leader?</p>
+
+    <div class="leader">
+      <div class="leader-left">
+        <span class="leader-label">Current leader · 5 + B</span>
+        <span class="leader-mark">bioticker<span class="dot"></span></span>
+      </div>
+      <span class="leader-label">Benchmark</span>
+    </div>
+
+    <!-- =========== DIRECTION 7 =========== -->
+    <div class="combo">
+      <div class="combo-label"><span class="pill">07</span> Pill / capsule mark + Geist wordmark</div>
+      <div class="combo-body">
+        <div class="hero">
+          <div class="d7-large">
+            <svg width="56" height="26" viewBox="0 0 56 26">
+              <rect x="1" y="1" width="54" height="24" rx="12" fill="none" stroke="#3fb950" stroke-width="2"/>
+              <rect x="1" y="1" width="27" height="24" rx="12" fill="#3fb950"/>
+            </svg>
+            BioTicker
+          </div>
+        </div>
+        <div class="nav">
+          <div class="d7-nav">
+            <svg width="32" height="15" viewBox="0 0 56 26">
+              <rect x="1" y="1" width="54" height="24" rx="12" fill="none" stroke="#3fb950" stroke-width="2"/>
+              <rect x="1" y="1" width="27" height="24" rx="12" fill="#3fb950"/>
+            </svg>
+            BioTicker
+          </div>
+          <div class="links"><a>Watchlist</a><a>Calendar</a><a>Valuation</a><a>Peers</a></div>
+          <div class="btn">Sign in</div>
+        </div>
+        <p class="notes">A pharmaceutical capsule is one of the most universally-read biotech icons. The green half signals "live / active." Reads instantly as "drug development" + "on-the-move" and works cleanly at favicon size.</p>
+      </div>
+    </div>
+
+    <!-- =========== DIRECTION 8 =========== -->
+    <div class="combo">
+      <div class="combo-label"><span class="pill">08</span> Integrated tick — the "i" becomes an up-arrow</div>
+      <div class="combo-body">
+        <div class="hero">
+          <div class="d8-large">biot<span class="tickmark">↑</span>cker</div>
+        </div>
+        <div class="nav">
+          <div class="d8-nav">biot<span class="tickmark">↑</span>cker</div>
+          <div class="links"><a>Watchlist</a><a>Calendar</a><a>Valuation</a><a>Peers</a></div>
+          <div class="btn">Sign in</div>
+        </div>
+        <p class="notes">Wordmark-only — no separate logo mark needed. The "i" gets replaced by an up-tick arrow, so the name literally contains the chart signal. Most minimal of all options, and the most conceptually tight: the name and the idea are the same shape.</p>
+      </div>
+    </div>
+
+    <!-- =========== DIRECTION 9 =========== -->
+    <div class="combo">
+      <div class="combo-label"><span class="pill">09</span> Monogram mark (Bt with helix spine)</div>
+      <div class="combo-body">
+        <div class="hero">
+          <div class="d9-large">
+            <svg width="42" height="42" viewBox="0 0 42 42">
+              <rect x="1" y="1" width="40" height="40" rx="9" fill="#3fb950"/>
+              <!-- B -->
+              <path d="M10 11 L10 31 L19 31 C22 31 24 29 24 27 C24 25 22 23 19 23 L10 23 M10 23 L10 11 L18 11 C21 11 22 13 22 15 C22 17 21 19 18 19 L10 19" stroke="#08090a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+              <!-- small chart tick -->
+              <path d="M27 28 L30 24 L32 26 L36 20" stroke="#08090a" stroke-width="2" stroke-linecap="round" fill="none"/>
+            </svg>
+            BioTicker
+          </div>
+        </div>
+        <div class="nav">
+          <div class="d9-nav">
+            <svg width="26" height="26" viewBox="0 0 42 42">
+              <rect x="1" y="1" width="40" height="40" rx="9" fill="#3fb950"/>
+              <path d="M10 11 L10 31 L19 31 C22 31 24 29 24 27 C24 25 22 23 19 23 L10 23 M10 23 L10 11 L18 11 C21 11 22 13 22 15 C22 17 21 19 18 19 L10 19" stroke="#08090a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+              <path d="M27 28 L30 24 L32 26 L36 20" stroke="#08090a" stroke-width="2" stroke-linecap="round" fill="none"/>
+            </svg>
+            BioTicker
+          </div>
+          <div class="links"><a>Watchlist</a><a>Calendar</a><a>Valuation</a><a>Peers</a></div>
+          <div class="btn">Sign in</div>
+        </div>
+        <p class="notes">A "B" mark with a tiny chart tick next to it, inside a rounded-square container. Self-contained brand mark that also works standalone — use this on app icons, social avatars, favicons, t-shirts. Most "real brand" feeling of the bunch.</p>
+      </div>
+    </div>
+
+    <!-- =========== DIRECTION 10 =========== -->
+    <div class="combo">
+      <div class="combo-label"><span class="pill">10</span> Stacked mono block (ticker-tape style)</div>
+      <div class="combo-body">
+        <div class="hero">
+          <div class="d10-large">BIO<br>TKR</div>
+        </div>
+        <div class="nav">
+          <div style="display: inline-flex; align-items: center; gap: 10px;">
+            <div class="d10-nav">BIO<br>TKR</div>
+            <span style="font-family: Geist, sans-serif; font-weight: 600; font-size: 17px; letter-spacing: -0.02em;">BioTicker</span>
+          </div>
+          <div class="links"><a>Watchlist</a><a>Calendar</a><a>Valuation</a><a>Peers</a></div>
+          <div class="btn">Sign in</div>
+        </div>
+        <p class="notes">A 2-line stacked block like a stock ticker-tape badge (BIO / TKR mimics a ticker symbol). Green fill makes it feel like an "in the money" pill. Works as a standalone mark next to the wordmark in the header. Most playful / distinctive option — memorable but louder than 5+B.</p>
+      </div>
+    </div>
+
+    <!-- =========== DIRECTION 11 =========== -->
+    <div class="combo">
+      <div class="combo-label"><span class="pill">11</span> Negative-space candlestick B</div>
+      <div class="combo-body">
+        <div class="hero">
+          <div class="d11-large">
+            <svg width="42" height="42" viewBox="0 0 42 42">
+              <rect x="1" y="1" width="40" height="40" rx="9" fill="#3fb950"/>
+              <!-- candlestick pattern cut in -->
+              <rect x="10" y="6" width="1" height="30" fill="#08090a"/>
+              <rect x="8" y="11" width="5" height="12" rx="1" fill="#08090a"/>
+              <rect x="18" y="6" width="1" height="30" fill="#08090a"/>
+              <rect x="16" y="16" width="5" height="10" rx="1" fill="#08090a"/>
+              <rect x="26" y="6" width="1" height="30" fill="#08090a"/>
+              <rect x="24" y="9" width="5" height="18" rx="1" fill="#08090a"/>
+              <rect x="34" y="6" width="1" height="30" fill="#08090a"/>
+              <rect x="32" y="14" width="5" height="8" rx="1" fill="#08090a"/>
+            </svg>
+            BioTicker
+          </div>
+        </div>
+        <div class="nav">
+          <div class="d11-nav">
+            <svg width="26" height="26" viewBox="0 0 42 42">
+              <rect x="1" y="1" width="40" height="40" rx="9" fill="#3fb950"/>
+              <rect x="10" y="6" width="1" height="30" fill="#08090a"/>
+              <rect x="8" y="11" width="5" height="12" rx="1" fill="#08090a"/>
+              <rect x="18" y="6" width="1" height="30" fill="#08090a"/>
+              <rect x="16" y="16" width="5" height="10" rx="1" fill="#08090a"/>
+              <rect x="26" y="6" width="1" height="30" fill="#08090a"/>
+              <rect x="24" y="9" width="5" height="18" rx="1" fill="#08090a"/>
+              <rect x="34" y="6" width="1" height="30" fill="#08090a"/>
+              <rect x="32" y="14" width="5" height="8" rx="1" fill="#08090a"/>
+            </svg>
+            BioTicker
+          </div>
+          <div class="links"><a>Watchlist</a><a>Calendar</a><a>Valuation</a><a>Peers</a></div>
+          <div class="btn">Sign in</div>
+        </div>
+        <p class="notes">The mark is a candlestick chart cut directly into a solid green tile — instantly reads as "stocks" without needing the word. Stronger visual signal than the line chart in direction 6. Pairs with a clean Geist wordmark so the mark does all the talking.</p>
+      </div>
+    </div>
+
+    <!-- =========== DIRECTION 12 =========== -->
+    <div class="combo">
+      <div class="combo-label"><span class="pill">12</span> Chart-line underline (the word itself sits on a chart)</div>
+      <div class="combo-body">
+        <div class="hero">
+          <div class="d12-large">
+            BioTicker
+            <svg viewBox="0 0 200 12" preserveAspectRatio="none" height="10">
+              <path d="M0 9 L40 9 L55 7 L85 8 L115 4 L145 5 L170 2 L200 2" stroke="#3fb950" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="200" cy="2" r="2" fill="#3fb950"/>
+            </svg>
+          </div>
+        </div>
+        <div class="nav">
+          <div class="d12-nav">
+            BioTicker
+            <svg viewBox="0 0 200 12" preserveAspectRatio="none" height="6">
+              <path d="M0 9 L40 9 L55 7 L85 8 L115 4 L145 5 L170 2 L200 2" stroke="#3fb950" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="200" cy="2" r="2" fill="#3fb950"/>
+            </svg>
+          </div>
+          <div class="links"><a>Watchlist</a><a>Calendar</a><a>Valuation</a><a>Peers</a></div>
+          <div class="btn">Sign in</div>
+        </div>
+        <p class="notes">The wordmark sits directly on a tiny chart line that rises from left to right with a dot at the current price. Completely wordmark-only (no separate logo mark). Feels like the product in miniature — every header shows the ticker name and the chart it's riding on.</p>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

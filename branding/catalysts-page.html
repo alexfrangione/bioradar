@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BioTicker — catalysts page</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-page: #08090a;
+    --bg-app: #0d1117;
+    --bg-elev: #161b22;
+    --bg-elev2: #1c2128;
+    --bg-elev3: #22272e;
+    --border: #30363d;
+    --border-subtle: #21262d;
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --text-dimmer: #6e7681;
+    --accent-green: #3fb950;
+    --accent-red: #f85149;
+    --accent-amber: #d29922;
+    --accent-blue: #58a6ff;
+    --accent-purple: #bc8cff;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    background: var(--bg-page);
+    color: var(--text);
+    margin: 0;
+    font-family: "Geist", system-ui, sans-serif;
+    font-feature-settings: "ss01", "ss03";
+  }
+
+  /* ============ nav + brand ============ */
+  .nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 32px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-page);
+  }
+  .nav-links { display: flex; gap: 24px; }
+  .nav-links a {
+    color: var(--text-dim); text-decoration: none;
+    font-size: 13px; font-weight: 500;
+  }
+  .nav-links a.active { color: var(--text); }
+  .nav-login {
+    font-size: 13px; font-weight: 500;
+    background: var(--bg-elev); border: 1px solid var(--border);
+    padding: 7px 14px; border-radius: 8px; color: var(--text);
+  }
+  .brand {
+    display: inline-flex; align-items: baseline;
+    font-weight: 600; letter-spacing: -0.04em;
+    text-transform: lowercase; font-size: 19px; gap: 0;
+  }
+  .brand-mark {
+    display: inline-block;
+    margin-left: 3px; transform: translateY(-3px);
+    color: var(--accent-green);
+  }
+
+  /* ============ page shell ============ */
+  .page { max-width: 1200px; margin: 0 auto; padding: 36px 32px 80px; }
+
+  .page-header {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    margin-bottom: 28px; padding-bottom: 20px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .page-header h1 {
+    font-size: 32px; font-weight: 700;
+    letter-spacing: -0.02em; margin: 0 0 6px;
+  }
+  .page-header .sub {
+    color: var(--text-dim); font-size: 14px;
+    margin: 0; line-height: 1.5;
+  }
+  .page-header .sub .gr { color: var(--accent-green); font-weight: 500; }
+
+  .controls { display: flex; gap: 8px; align-items: center; }
+  .ctl-group {
+    display: inline-flex;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .ctl-group button {
+    background: transparent; border: 0; color: var(--text-dim);
+    font-family: "Geist", sans-serif; font-size: 12.5px; font-weight: 500;
+    padding: 7px 14px; cursor: pointer;
+    border-right: 1px solid var(--border-subtle);
+  }
+  .ctl-group button:last-child { border-right: 0; }
+  .ctl-group button.on { background: var(--bg-elev2); color: var(--text); }
+
+  .ctl-single {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-size: 12.5px; color: var(--text);
+    font-weight: 500;
+  }
+  .ctl-single .cal-icon { color: var(--text-dim); }
+
+  /* ============ week-at-a-glance strip ============ */
+  .glance {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 12px; margin-bottom: 28px;
+  }
+  .glance-card {
+    background: var(--bg-elev);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: grid; gap: 4px;
+  }
+  .glance-card .lbl {
+    font-family: "Geist Mono", monospace;
+    font-size: 10px; color: var(--text-dim);
+    letter-spacing: 0.12em; text-transform: uppercase;
+  }
+  .glance-card .n {
+    font-family: "Geist Mono", monospace;
+    font-weight: 600; font-size: 26px;
+    letter-spacing: -0.01em;
+  }
+  .glance-card.pdufa .n    { color: var(--accent-amber); }
+  .glance-card.adcom .n    { color: var(--accent-blue); }
+  .glance-card.readout .n  { color: var(--accent-purple); }
+  .glance-card.earnings .n { color: var(--accent-green); }
+
+  /* ============ legend ============ */
+  .legend-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 18px;
+  }
+  .cal-title {
+    font-family: "Geist Mono", monospace;
+    font-size: 11px; color: var(--text-dim);
+    letter-spacing: 0.14em; text-transform: uppercase;
+  }
+  .cal-legend {
+    display: flex; gap: 14px;
+    font-family: "Geist Mono", monospace;
+    font-size: 10px; color: var(--text-dim);
+    letter-spacing: 0.06em;
+  }
+  .cal-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .cal-legend span::before { content: ""; width: 7px; height: 7px; border-radius: 1px; }
+  .cal-legend .pdufa::before    { background: var(--accent-amber); }
+  .cal-legend .adcom::before    { background: var(--accent-blue); }
+  .cal-legend .readout::before  { background: var(--accent-purple); }
+  .cal-legend .earnings::before { background: var(--accent-green); }
+
+  /* ============ tier layout ============ */
+  .tiers { display: grid; gap: 28px; }
+  .tier-head {
+    display: flex; align-items: center; gap: 12px;
+    font-family: "Geist Mono", monospace;
+    font-size: 11px; color: var(--text-dim);
+    letter-spacing: 0.14em; text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .tier-head .bar { flex: 1; height: 1px; background: var(--border-subtle); }
+  .tier-head .count {
+    background: var(--bg-elev2); color: var(--text);
+    padding: 1px 8px; border-radius: 4px;
+    font-size: 10px; letter-spacing: 0.06em;
+  }
+  .tier-head .lbl { font-weight: 600; }
+
+  .tier-a .tier-head .lbl { color: var(--accent-amber); }
+
+  .tier-a-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+  }
+  .tier-a-card {
+    background: var(--bg-elev);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    padding: 22px;
+    display: grid; gap: 12px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color .15s;
+  }
+  .tier-a-card:hover { border-color: var(--border); }
+  .tier-a-card::after {
+    content: ""; position: absolute;
+    left: 0; top: 0; bottom: 0; width: 3px;
+  }
+  .tier-a-card.pdufa::after { background: var(--accent-amber); }
+  .tier-a-card.adcom::after { background: var(--accent-blue); }
+  .tier-a-card .top {
+    display: flex; align-items: center; gap: 10px;
+    font-family: "Geist Mono", monospace; font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.1em;
+  }
+  .tier-a-card.pdufa .top .type { color: var(--accent-amber); }
+  .tier-a-card.adcom .top .type { color: var(--accent-blue); }
+  .tier-a-card .top .when { color: var(--text-dim); }
+  .tier-a-card .top .days-out {
+    margin-left: auto; color: var(--text-dimmer);
+    font-size: 10px;
+  }
+  .tier-a-card .ticker-row {
+    display: flex; align-items: baseline; gap: 10px;
+  }
+  .tier-a-card .tkr {
+    font-family: "Geist Mono", monospace; font-weight: 600;
+    font-size: 26px; color: var(--text);
+  }
+  .tier-a-card .name { color: var(--text-dim); font-size: 13px; }
+  .tier-a-card .evt {
+    font-size: 16px; font-weight: 500; color: var(--text);
+    line-height: 1.35;
+  }
+  .tier-a-card .blurb {
+    color: var(--text-dim); font-size: 13px;
+    line-height: 1.55;
+  }
+  .tier-a-card .meta-row {
+    display: flex; gap: 16px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-subtle);
+    font-family: "Geist Mono", monospace;
+    font-size: 11px; color: var(--text-dim);
+  }
+  .tier-a-card .meta-row b { color: var(--text); font-weight: 600; }
+
+  .tier-b-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+  }
+  .tier-b-card {
+    background: var(--bg-elev);
+    border-left: 3px solid var(--accent-purple);
+    border-radius: 8px;
+    padding: 14px 16px;
+    display: grid; gap: 6px;
+    transition: background .15s;
+  }
+  .tier-b-card:hover { background: var(--bg-elev2); }
+  .tier-b-card .top {
+    display: flex; justify-content: space-between;
+    font-family: "Geist Mono", monospace; font-size: 10px;
+    color: var(--text-dim); letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .tier-b-card .tkr-line {
+    display: flex; align-items: baseline; gap: 10px;
+  }
+  .tier-b-card .tkr {
+    font-family: "Geist Mono", monospace; font-weight: 600;
+    color: var(--text); font-size: 15px;
+  }
+  .tier-b-card .name { color: var(--text-dim); font-size: 11.5px; }
+  .tier-b-card .ttl { color: var(--text-dim); font-size: 13px; line-height: 1.4; }
+
+  .tier-c-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tier-c-chip {
+    background: var(--bg-elev);
+    border: 1px solid var(--border-subtle);
+    border-left: 3px solid var(--accent-green);
+    border-radius: 999px;
+    padding: 6px 14px 6px 12px;
+    font-size: 13px;
+    display: inline-flex; gap: 8px; align-items: baseline;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .tier-c-chip:hover { background: var(--bg-elev2); }
+  .tier-c-chip .tkr {
+    font-family: "Geist Mono", monospace;
+    font-weight: 600; color: var(--text);
+  }
+  .tier-c-chip .day {
+    font-family: "Geist Mono", monospace; font-size: 10px;
+    color: var(--text-dim); letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .tier-c-chip.also { border-left-color: var(--accent-purple); }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<div class="nav">
+  <div class="brand">bioticker<span class="brand-mark"><svg width="15" height="15" viewBox="0 0 28 28"><circle cx="14" cy="14" r="5" fill="currentColor"/><g fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/><g transform="rotate(60 14 14)"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/></g><g transform="rotate(120 14 14)"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/></g><g transform="rotate(180 14 14)"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/></g><g transform="rotate(240 14 14)"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/></g><g transform="rotate(300 14 14)"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/></g></g></svg></span></div>
+  <div class="nav-links">
+    <a class="active">Catalysts</a>
+    <a>Watchlist</a>
+    <a>Methodology</a>
+  </div>
+  <div class="nav-login">Log in</div>
+</div>
+
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="page-header">
+    <div>
+      <h1>Catalysts</h1>
+      <p class="sub">
+        <span class="gr">11 events</span> across 9 tickers · Apr 21 – Apr 27, 2026
+      </p>
+    </div>
+    <div class="controls">
+      <div class="ctl-group">
+        <button class="on">Week</button>
+        <button>Month</button>
+        <button>Quarter</button>
+      </div>
+      <div class="ctl-single">
+        <span class="cal-icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        </span>
+        This week
+      </div>
+      <div class="ctl-group">
+        <button class="on">Editorial</button>
+        <button>Chrono</button>
+        <button>Table</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GLANCE STRIP -->
+  <div class="glance">
+    <div class="glance-card pdufa">
+      <div class="lbl">PDUFA</div>
+      <div class="n">2</div>
+    </div>
+    <div class="glance-card adcom">
+      <div class="lbl">AdCom</div>
+      <div class="n">1</div>
+    </div>
+    <div class="glance-card readout">
+      <div class="lbl">Readouts</div>
+      <div class="n">4</div>
+    </div>
+    <div class="glance-card earnings">
+      <div class="lbl">Earnings</div>
+      <div class="n">4</div>
+    </div>
+  </div>
+
+  <!-- LEGEND + TIERS -->
+  <div class="legend-bar">
+    <div class="cal-title">Ranked by expected market impact</div>
+    <div class="cal-legend">
+      <span class="pdufa">PDUFA</span>
+      <span class="adcom">AdCom</span>
+      <span class="readout">Readout</span>
+      <span class="earnings">Earnings</span>
+    </div>
+  </div>
+
+  <div class="tiers">
+
+    <!-- Tier A: high impact -->
+    <div class="tier-a">
+      <div class="tier-head">
+        <span class="lbl">High impact</span>
+        <span class="count">2</span>
+        <span class="bar"></span>
+      </div>
+      <div class="tier-a-grid">
+        <div class="tier-a-card adcom">
+          <div class="top">
+            <span class="type">AdCom</span>
+            <span class="when">Thu · Apr 24 · 14:00 ET</span>
+            <span class="days-out">in 3d</span>
+          </div>
+          <div class="ticker-row">
+            <span class="tkr">SRPT</span>
+            <span class="name">Sarepta Therapeutics</span>
+          </div>
+          <div class="evt">Elevidys label expansion to non-ambulatory DMD</div>
+          <div class="blurb">
+            Outcome likely dictates the drug's peak sales scenario and read-through for the rest of the gene-therapy pipeline. Options-implied move ±18%.
+          </div>
+          <div class="meta-row">
+            <span>Mkt cap · <b>$11.8B</b></span>
+            <span>IV · <b>82%</b></span>
+            <span>Short int · <b>11.4%</b></span>
+          </div>
+        </div>
+
+        <div class="tier-a-card pdufa">
+          <div class="top">
+            <span class="type">PDUFA</span>
+            <span class="when">Fri · Apr 25</span>
+            <span class="days-out">in 4d</span>
+          </div>
+          <div class="ticker-row">
+            <span class="tkr">MRNA</span>
+            <span class="name">Moderna</span>
+          </div>
+          <div class="evt">mRNA-1083 flu/COVID combination vaccine decision</div>
+          <div class="blurb">
+            First combination respiratory vaccine decision at FDA. Read-through for the broader pipeline's commercial narrative heading into the fall season.
+          </div>
+          <div class="meta-row">
+            <span>Mkt cap · <b>$37.2B</b></span>
+            <span>IV · <b>64%</b></span>
+            <span>Short int · <b>8.1%</b></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tier B: clinical readouts -->
+    <div class="tier-b">
+      <div class="tier-head">
+        <span class="lbl" style="color: var(--accent-purple);">Clinical readouts</span>
+        <span class="count">4</span>
+        <span class="bar"></span>
+      </div>
+      <div class="tier-b-grid">
+        <div class="tier-b-card">
+          <div class="top"><span>Ph1/2 · BEACON</span><span>Wed · 23</span></div>
+          <div class="tkr-line"><span class="tkr">BEAM</span><span class="name">Beam Therapeutics</span></div>
+          <div class="ttl">Sickle cell disease cohort data</div>
+        </div>
+        <div class="tier-b-card">
+          <div class="top"><span>Data · ASCO abstract</span><span>Wed · 23</span></div>
+          <div class="tkr-line"><span class="tkr">CRSP</span><span class="name">CRISPR Therapeutics</span></div>
+          <div class="ttl">Exa-cel 24-month durability</div>
+        </div>
+        <div class="tier-b-card">
+          <div class="top"><span>Ph2 · Plozasiran</span><span>Mon · 21</span></div>
+          <div class="tkr-line"><span class="tkr">ARWR</span><span class="name">Arrowhead</span></div>
+          <div class="ttl">HTG triglyceride data</div>
+        </div>
+        <div class="tier-b-card">
+          <div class="top"><span>Data · AACR update</span><span>Sun · 27</span></div>
+          <div class="tkr-line"><span class="tkr">REGN</span><span class="name">Regeneron</span></div>
+          <div class="ttl">Libtayo KN-724 update</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tier C: earnings -->
+    <div class="tier-b">
+      <div class="tier-head">
+        <span class="lbl" style="color: var(--accent-green);">Earnings</span>
+        <span class="count">4</span>
+        <span class="bar"></span>
+      </div>
+      <div class="tier-c-row">
+        <span class="tier-c-chip"><span class="tkr">ISRG</span><span class="day">Mon 21 · AMC</span></span>
+        <span class="tier-c-chip"><span class="tkr">JNJ</span><span class="day">Tue 22 · BMO</span></span>
+        <span class="tier-c-chip"><span class="tkr">BMY</span><span class="day">Thu 24 · AMC</span></span>
+        <span class="tier-c-chip"><span class="tkr">VRTX</span><span class="day">Fri 25 · BMO · guidance</span></span>
+      </div>
+    </div>
+
+    <!-- Tier D: also this week -->
+    <div class="tier-b">
+      <div class="tier-head">
+        <span class="lbl">Also this week</span>
+        <span class="count">1</span>
+        <span class="bar"></span>
+      </div>
+      <div class="tier-c-row">
+        <span class="tier-c-chip also">
+          <span class="tkr">INSM</span>
+          <span class="day">Tue 22 · PDUFA · Brensocatib</span>
+        </span>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+</body>
+</html>

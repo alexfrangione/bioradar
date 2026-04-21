@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BioTicker — hero directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-page: #08090a;
+    --bg-app: #0d1117;
+    --bg-elev: #161b22;
+    --bg-elev2: #1c2128;
+    --bg-elev3: #22272e;
+    --border: #30363d;
+    --border-subtle: #21262d;
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --text-dimmer: #6e7681;
+    --accent-green: #3fb950;
+    --accent-red: #f85149;
+    --accent-amber: #d29922;
+    --accent-blue: #58a6ff;
+    --accent-purple: #bc8cff;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    background: var(--bg-page);
+    color: var(--text);
+    margin: 0;
+    font-family: "Geist", system-ui, sans-serif;
+    font-feature-settings: "ss01", "ss03";
+  }
+  .page { max-width: 1280px; margin: 0 auto; padding: 40px 20px 80px; }
+  .page-title { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 4px; }
+  .page-sub { color: var(--text-dim); font-size: 14px; margin: 0 0 32px; max-width: 720px; line-height: 1.6; }
+
+  .direction {
+    margin-bottom: 40px;
+    background: var(--bg-app);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .dir-label {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 20px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    font-family: "Geist Mono", monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .dir-label .pill {
+    padding: 2px 8px; border-radius: 4px;
+    background: var(--bg-elev2); color: var(--text);
+    font-size: 10px; letter-spacing: 0.06em;
+  }
+  .dir-frame {
+    background: var(--bg-page);
+    border-bottom: 1px solid var(--border);
+    min-height: 640px;
+    display: flex;
+    flex-direction: column;
+  }
+  .dir-notes {
+    color: var(--text-dim); font-size: 13px; line-height: 1.65;
+    padding: 18px 22px;
+  }
+  .dir-notes strong { color: var(--text); font-weight: 600; }
+
+  /* ============ shared wordmark ============ */
+  .brand {
+    display: inline-flex; align-items: baseline;
+    font-weight: 600; letter-spacing: -0.04em; text-transform: lowercase;
+    font-size: 19px; gap: 0;
+  }
+  .brand-mark {
+    display: inline-block; margin-left: 3px; transform: translateY(-3px);
+    color: var(--accent-green);
+  }
+  .brand-mark-lg {
+    margin-left: 6px; transform: translateY(-9px);
+  }
+  .brand-lg { font-size: 42px; }
+
+  /* ============ nav ============ */
+  .nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 32px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .nav-links { display: flex; gap: 24px; }
+  .nav-links a {
+    color: var(--text-dim); text-decoration: none;
+    font-size: 13px; font-weight: 500;
+  }
+  .nav-login {
+    font-size: 13px; font-weight: 500;
+    background: var(--bg-elev); border: 1px solid var(--border);
+    padding: 7px 14px; border-radius: 8px; color: var(--text);
+  }
+
+  /* =================================================================== */
+  /* DIRECTION 1 — TERMINAL                                               */
+  /* =================================================================== */
+  .d1 .hero {
+    flex: 1; padding: 64px 32px 32px;
+    display: flex; flex-direction: column; align-items: center;
+    text-align: center;
+  }
+  .d1 .meter {
+    font-family: "Geist Mono", monospace;
+    font-size: 11px; color: var(--text-dimmer);
+    letter-spacing: 0.08em; text-transform: uppercase;
+    display: flex; gap: 24px; margin-bottom: 40px;
+    align-items: center;
+  }
+  .d1 .meter .dot {
+    display: inline-block; width: 6px; height: 6px;
+    border-radius: 50%; background: var(--accent-green);
+    margin-right: 6px;
+    box-shadow: 0 0 0 0 rgba(63,185,80,.6);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(63,185,80,.45); }
+    70%  { box-shadow: 0 0 0 8px rgba(63,185,80,0); }
+    100% { box-shadow: 0 0 0 0 rgba(63,185,80,0); }
+  }
+  .d1 h1 {
+    font-size: 56px; font-weight: 700;
+    letter-spacing: -0.03em; line-height: 1.05;
+    margin: 0 0 20px; max-width: 780px;
+  }
+  .d1 h1 em {
+    font-style: normal;
+    color: var(--accent-green);
+  }
+  .d1 .termline {
+    width: 100%; max-width: 680px;
+    background: var(--bg-elev); border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 22px;
+    display: flex; align-items: center; gap: 12px;
+    font-family: "Geist Mono", monospace;
+    font-size: 17px;
+    box-shadow: 0 1px 0 rgba(255,255,255,.02) inset, 0 12px 40px -12px rgba(0,0,0,.6);
+    margin-bottom: 16px;
+  }
+  .d1 .termline .prompt { color: var(--accent-green); }
+  .d1 .termline .placeholder { color: var(--text-dimmer); }
+  .d1 .termline .caret {
+    display: inline-block; width: 9px; height: 20px;
+    background: var(--accent-green); opacity: .85;
+    animation: blink 1.1s steps(1) infinite;
+    vertical-align: middle;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  .d1 .termline kbd {
+    margin-left: auto;
+    font-family: "Geist Mono", monospace;
+    font-size: 10px; color: var(--text-dim);
+    background: var(--bg-elev2); border: 1px solid var(--border);
+    padding: 3px 7px; border-radius: 4px; letter-spacing: 0.05em;
+  }
+  .d1 .shortcuts {
+    display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+    margin-top: 22px;
+  }
+  .d1 .shortcuts .chip {
+    font-family: "Geist Mono", monospace;
+    font-size: 11px; color: var(--text-dim);
+    padding: 5px 11px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border-subtle);
+    border-radius: 999px;
+  }
+  .d1 .shortcuts .chip b { color: var(--text); font-weight: 600; }
+
+  /* =================================================================== */
+  /* DIRECTION 2 — CATALYST-LED                                           */
+  /* =================================================================== */
+  .d2 .hero {
+    flex: 1;
+    padding: 48px 32px 32px;
+    display: grid; grid-template-columns: 1fr;
+    gap: 28px;
+  }
+  .d2 .eyebrow {
+    color: var(--accent-green);
+    font-family: "Geist Mono", monospace;
+    font-size: 11px; font-weight: 500;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .d2 .eyebrow .live {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent-green); animation: pulse 2s infinite;
+  }
+  .d2 h1 {
+    font-size: 44px; font-weight: 700;
+    letter-spacing: -0.03em; line-height: 1.1;
+    margin: 6px 0 8px;
+    max-width: 760px;
+  }
+  .d2 .h1-quiet { color: var(--text-dim); font-weight: 500; }
+  .d2 .intro-copy { color: var(--text-dim); font-size: 15px; line-height: 1.6; max-width: 560px; }
+  .d2 .split { display: grid; grid-template-columns: 1fr 360px; gap: 32px; align-items: start; }
+  .d2 .cat-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  }
+  .d2 .cat {
+    background: var(--bg-elev);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 14px 15px;
+    display: grid; gap: 6px;
+    position: relative;
+    transition: border-color .15s;
+  }
+  .d2 .cat:hover { border-color: var(--border); }
+  .d2 .cat .meta {
+    display: flex; justify-content: space-between;
+    font-family: "Geist Mono", monospace;
+    font-size: 11px; color: var(--text-dimmer);
+  }
+  .d2 .cat .tkr {
+    font-family: "Geist Mono", monospace; font-weight: 600;
+    color: var(--text); font-size: 13px;
+  }
+  .d2 .cat .title { font-size: 14px; font-weight: 500; line-height: 1.35; }
+  .d2 .cat .tag {
+    display: inline-block; font-family: "Geist Mono", monospace;
+    font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase;
+    padding: 2px 7px; border-radius: 3px;
+    width: fit-content;
+  }
+  .d2 .tag.readout { background: rgba(188,140,255,.14); color: var(--accent-purple); }
+  .d2 .tag.fda     { background: rgba(88,166,255,.14); color: var(--accent-blue); }
+  .d2 .tag.pdufa   { background: rgba(210,153,34,.16); color: var(--accent-amber); }
+  .d2 .tag.erngs   { background: rgba(63,185,80,.14);  color: var(--accent-green); }
+
+  .d2 .search-card {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px;
+    display: grid; gap: 12px;
+    align-self: start;
+  }
+  .d2 .search-card .lbl {
+    font-family: "Geist Mono", monospace; font-size: 10px;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .d2 .search-card input {
+    background: var(--bg-page); border: 1px solid var(--border);
+    color: var(--text); font-size: 15px;
+    padding: 12px 14px; border-radius: 8px; outline: none;
+    font-family: "Geist", sans-serif;
+  }
+  .d2 .search-card .examples {
+    display: flex; flex-wrap: wrap; gap: 6px;
+  }
+  .d2 .search-card .examples .ex {
+    font-family: "Geist Mono", monospace; font-size: 11px;
+    background: var(--bg-elev2); color: var(--text-dim);
+    padding: 4px 9px; border-radius: 999px;
+    border: 1px solid var(--border-subtle);
+  }
+  .d2 .search-card .stats {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+    padding-top: 10px; border-top: 1px solid var(--border-subtle);
+  }
+  .d2 .search-card .stat .n {
+    font-family: "Geist Mono", monospace; font-size: 16px; font-weight: 600; color: var(--text);
+  }
+  .d2 .search-card .stat .l { font-size: 11px; color: var(--text-dim); }
+
+  /* =================================================================== */
+  /* DIRECTION 3 — EDITORIAL                                              */
+  /* =================================================================== */
+  .d3 .hero {
+    flex: 1;
+    padding: 96px 48px 64px;
+    display: flex; flex-direction: column; align-items: center;
+    text-align: center;
+  }
+  .d3 .eyebrow {
+    font-family: "Geist Mono", monospace;
+    color: var(--text-dim);
+    font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase;
+    margin-bottom: 28px;
+  }
+  .d3 h1 {
+    font-family: "Instrument Serif", "Geist", serif;
+    font-weight: 400;
+    font-size: 64px; letter-spacing: -0.015em; line-height: 1.0;
+    margin: 0 0 24px; max-width: 780px;
+  }
+  .d3 h1 .it { font-style: italic; color: var(--text-dim); }
+  .d3 .kicker {
+    color: var(--text-dim); font-size: 17px;
+    line-height: 1.55; max-width: 520px;
+    margin-bottom: 44px;
+  }
+  .d3 .search {
+    display: flex; gap: 0;
+    width: 100%; max-width: 560px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 14px;
+    align-items: center;
+    margin-bottom: 44px;
+  }
+  .d3 .search svg { margin-right: 14px; color: var(--text-dim); }
+  .d3 .search input {
+    flex: 1; background: transparent; border: 0; outline: 0;
+    color: var(--text); font-family: "Geist", sans-serif;
+    font-size: 18px;
+  }
+  .d3 .search .go {
+    font-family: "Geist Mono", monospace; font-size: 11px;
+    color: var(--text-dim); letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .d3 .coverage {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 32px; max-width: 720px; width: 100%;
+    padding-top: 32px;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .d3 .coverage .item { text-align: left; }
+  .d3 .coverage .n {
+    font-family: "Geist Mono", monospace; font-weight: 600;
+    font-size: 20px; color: var(--text); margin-bottom: 2px;
+  }
+  .d3 .coverage .l { color: var(--text-dim); font-size: 12px; }
+
+  /* =================================================================== */
+  /* DIRECTION 4 — SPLIT / LIVE PREVIEW                                   */
+  /* =================================================================== */
+  .d4 .hero { flex: 1; display: grid; grid-template-columns: 1fr 1fr; }
+  .d4 .left {
+    padding: 72px 48px 48px 48px;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .d4 .eyebrow {
+    color: var(--accent-green);
+    font-family: "Geist Mono", monospace;
+    font-size: 11px; font-weight: 500;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    margin-bottom: 18px;
+  }
+  .d4 h1 {
+    font-size: 42px; font-weight: 700;
+    letter-spacing: -0.03em; line-height: 1.1;
+    margin: 0 0 16px;
+  }
+  .d4 .copy { color: var(--text-dim); font-size: 16px; line-height: 1.55; max-width: 460px; margin-bottom: 28px; }
+  .d4 .s-row { display: flex; gap: 8px; max-width: 460px; margin-bottom: 12px; }
+  .d4 .s-row input {
+    flex: 1; background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 9px; padding: 12px 14px;
+    color: var(--text); font-family: "Geist", sans-serif; font-size: 15px;
+    outline: none;
+  }
+  .d4 .s-row button {
+    background: var(--accent-green); color: var(--bg-page);
+    font-weight: 600; font-size: 14px;
+    border: 0; border-radius: 9px;
+    padding: 0 18px; cursor: pointer;
+  }
+  .d4 .examples { display: flex; gap: 6px; flex-wrap: wrap; }
+  .d4 .examples .ex {
+    font-family: "Geist Mono", monospace; font-size: 11px;
+    color: var(--text-dim);
+    background: var(--bg-elev);
+    border: 1px solid var(--border-subtle);
+    padding: 4px 10px; border-radius: 999px;
+  }
+  .d4 .right {
+    padding: 40px 48px 40px 0;
+    display: flex; align-items: center;
+  }
+  .d4 .preview {
+    width: 100%;
+    background: var(--bg-app);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 30px 80px -30px rgba(0,0,0,.8), 0 0 0 1px rgba(63,185,80,.04);
+  }
+  .d4 .preview .bar {
+    padding: 10px 16px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    display: flex; gap: 8px; align-items: center;
+    font-family: "Geist Mono", monospace;
+    font-size: 11px; color: var(--text-dim);
+  }
+  .d4 .preview .bar::before {
+    content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+    background: var(--accent-red);
+    box-shadow: 16px 0 0 var(--accent-amber), 32px 0 0 var(--accent-green);
+    margin-right: 40px;
+  }
+  .d4 .preview .body { padding: 18px; display: grid; gap: 14px; }
+  .d4 .pv-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .d4 .pv-head .tkr {
+    font-family: "Geist Mono", monospace; font-weight: 600; font-size: 18px;
+  }
+  .d4 .pv-head .name { color: var(--text-dim); font-size: 12px; margin-left: 8px; }
+  .d4 .pv-head .px {
+    font-family: "Geist Mono", monospace; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .d4 .pv-head .chg { color: var(--accent-green); font-size: 11px; margin-left: 6px; }
+  .d4 .chart {
+    background: var(--bg-page); border: 1px solid var(--border-subtle);
+    border-radius: 8px; height: 120px; position: relative; overflow: hidden;
+  }
+  .d4 .chart svg { display: block; width: 100%; height: 100%; }
+  .d4 .pv-pipeline {
+    display: grid; grid-template-columns: 1fr; gap: 6px;
+    font-size: 12px;
+  }
+  .d4 .pv-pipeline .row {
+    display: grid; grid-template-columns: 90px 1fr auto;
+    gap: 8px; align-items: center;
+    padding: 6px 8px; background: var(--bg-elev); border-radius: 6px;
+    border: 1px solid var(--border-subtle);
+  }
+  .d4 .pv-pipeline .drug { font-weight: 500; }
+  .d4 .phase-bar {
+    height: 6px; background: var(--bg-elev2); border-radius: 999px;
+    position: relative; overflow: hidden;
+  }
+  .d4 .phase-bar .fill {
+    position: absolute; left: 0; top: 0; bottom: 0;
+    background: var(--accent-green); border-radius: 999px;
+  }
+  .d4 .pv-pipeline .phase {
+    font-family: "Geist Mono", monospace; font-size: 10px; color: var(--text-dim);
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1 class="page-title">Landing hero — four directions</h1>
+  <p class="page-sub">Four distinct takes on the landing page hero, each using the locked bioticker wordmark and the GitHub-dark palette. Pick one and we'll build it into the real app.</p>
+
+  <!-- ============================================================= -->
+  <!-- DIRECTION 1 — TERMINAL                                         -->
+  <!-- ============================================================= -->
+  <div class="direction d1">
+    <div class="dir-label">
+      <span><span class="pill">01</span> &nbsp;Terminal — "tool for pros"</span>
+      <span>Dense · monospace · one input</span>
+    </div>
+    <div class="dir-frame">
+      <div class="nav">
+        <div class="brand">bioticker<span class="brand-mark"><svg width="15" height="15" viewBox="0 0 28 28"><circle cx="14" cy="14" r="5" fill="currentColor"/><g fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/><g transform="rotate(60 14 14)"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/></g><g transform="rotate(120 14 14)"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/></g><g transform="rotate(180 14 14)"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/></g><g transform="rotate(240 14 14)"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/></g><g transform="rotate(300 14 14)"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/></g></g></svg></span></div>
+        <div class="nav-links"><a>Catalysts</a><a>Watchlist</a><a>Methodology</a></div>
+        <div class="nav-login">Log in</div>
+      </div>
+
+      <div class="hero">
+        <div class="meter">
+          <span><span class="dot"></span>Live · 14 event sources</span>
+          <span>1,284 biotech tickers indexed</span>
+          <span>Updated hourly</span>
+        </div>
+
+        <h1>Every biotech,<br/><em>decoded</em> in one page.</h1>
+
+        <div class="termline">
+          <span class="prompt">&gt;</span>
+          <span class="placeholder">search ticker or company —&nbsp;</span>
+          <span class="caret"></span>
+          <kbd>⌘K</kbd>
+        </div>
+
+        <div class="shortcuts">
+          <span class="chip">Try <b>MRNA</b></span>
+          <span class="chip"><b>VRTX</b></span>
+          <span class="chip"><b>CRSP</b></span>
+          <span class="chip"><b>SRPT</b></span>
+          <span class="chip"><b>BEAM</b></span>
+        </div>
+      </div>
+    </div>
+    <p class="dir-notes">
+      <strong>Feel:</strong> Bloomberg terminal, CLI for pros. A single blinking command-bar anchors the page; everything else is restrained. Monospace meter up top quietly advertises data freshness. <strong>Best for:</strong> audiences who know what they want and don't need convincing. <strong>Risk:</strong> can feel cold to first-time visitors who haven't seen the product yet.
+    </p>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- DIRECTION 2 — CATALYST-LED                                     -->
+  <!-- ============================================================= -->
+  <div class="direction d2">
+    <div class="dir-label">
+      <span><span class="pill">02</span> &nbsp;Catalyst-led — "show, don't tell"</span>
+      <span>Real upcoming events are the hero</span>
+    </div>
+    <div class="dir-frame">
+      <div class="nav">
+        <div class="brand">bioticker<span class="brand-mark"><svg width="15" height="15" viewBox="0 0 28 28"><circle cx="14" cy="14" r="5" fill="currentColor"/><g fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/><g transform="rotate(60 14 14)"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/></g><g transform="rotate(120 14 14)"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/></g><g transform="rotate(180 14 14)"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/></g><g transform="rotate(240 14 14)"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/></g><g transform="rotate(300 14 14)"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/></g></g></svg></span></div>
+        <div class="nav-links"><a>Catalysts</a><a>Watchlist</a><a>Methodology</a></div>
+        <div class="nav-login">Log in</div>
+      </div>
+      <div class="hero">
+        <div>
+          <div class="eyebrow"><span class="live"></span>Week of Apr 20 · 38 catalysts</div>
+          <h1>Next biotech catalysts.<br/><span class="h1-quiet">Every ticker. Every readout. One page.</span></h1>
+          <p class="intro-copy">Pipeline, upcoming catalysts, cash runway, and risk-adjusted valuation — for any biotech ticker, in seconds.</p>
+        </div>
+
+        <div class="split">
+          <div class="cat-grid">
+            <div class="cat">
+              <div class="meta"><span>Apr 24</span><span>Fri · 14:00</span></div>
+              <div><span class="tkr">SRPT</span></div>
+              <div class="title">FDA AdCom on Elevidys expanded label</div>
+              <span class="tag fda">FDA AdCom</span>
+            </div>
+            <div class="cat">
+              <div class="meta"><span>Apr 25</span><span>pre-market</span></div>
+              <div><span class="tkr">VRTX</span></div>
+              <div class="title">Q1 2026 earnings &amp; guidance update</div>
+              <span class="tag erngs">Earnings</span>
+            </div>
+            <div class="cat">
+              <div class="meta"><span>Apr 28</span><span>—</span></div>
+              <div><span class="tkr">BEAM</span></div>
+              <div class="title">BEACON Ph1/2 sickle cell readout</div>
+              <span class="tag readout">Ph1/2 Readout</span>
+            </div>
+            <div class="cat">
+              <div class="meta"><span>May 2</span><span>—</span></div>
+              <div><span class="tkr">MRNA</span></div>
+              <div class="title">PDUFA date — mRNA-1083 flu/COVID combo</div>
+              <span class="tag pdufa">PDUFA</span>
+            </div>
+            <div class="cat">
+              <div class="meta"><span>May 4</span><span>ASCO abstract</span></div>
+              <div><span class="tkr">CRSP</span></div>
+              <div class="title">Exa-cel 24-mo durability data</div>
+              <span class="tag readout">Data</span>
+            </div>
+            <div class="cat">
+              <div class="meta"><span>May 8</span><span>—</span></div>
+              <div><span class="tkr">NTLA</span></div>
+              <div class="title">NTLA-2002 Ph3 interim readout</div>
+              <span class="tag readout">Ph3 Interim</span>
+            </div>
+          </div>
+          <div class="search-card">
+            <div class="lbl">Look up a ticker</div>
+            <input placeholder="CRSP, Vertex, Moderna…" />
+            <div class="examples">
+              <span class="ex">CRSP</span><span class="ex">SRPT</span><span class="ex">BEAM</span><span class="ex">VRTX</span><span class="ex">MRNA</span>
+            </div>
+            <div class="stats">
+              <div class="stat"><div class="n">1,284</div><div class="l">biotech tickers</div></div>
+              <div class="stat"><div class="n">14</div><div class="l">event sources</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="dir-notes">
+      <strong>Feel:</strong> The product demos itself. Visitors see real upcoming catalysts in the first second — no pitch required. Search moves to a sidebar card. <strong>Best for:</strong> landing-to-use conversion; shows the value prop literally. <strong>Risk:</strong> needs live catalyst data to look good; a stale page is a worse first impression than static marketing copy.
+    </p>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- DIRECTION 3 — EDITORIAL                                        -->
+  <!-- ============================================================= -->
+  <div class="direction d3">
+    <div class="dir-label">
+      <span><span class="pill">03</span> &nbsp;Editorial — "research-grade"</span>
+      <span>Quiet · serifed display · lots of air</span>
+    </div>
+    <div class="dir-frame">
+      <div class="nav">
+        <div class="brand">bioticker<span class="brand-mark"><svg width="15" height="15" viewBox="0 0 28 28"><circle cx="14" cy="14" r="5" fill="currentColor"/><g fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/><g transform="rotate(60 14 14)"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/></g><g transform="rotate(120 14 14)"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/></g><g transform="rotate(180 14 14)"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/></g><g transform="rotate(240 14 14)"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/></g><g transform="rotate(300 14 14)"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/></g></g></svg></span></div>
+        <div class="nav-links"><a>Catalysts</a><a>Watchlist</a><a>Methodology</a></div>
+        <div class="nav-login">Log in</div>
+      </div>
+      <div class="hero">
+        <div class="eyebrow">Biotech investor research · Est. 2026</div>
+        <h1>Pipeline. Catalysts.<br/><span class="it">Valuation, rigorously.</span></h1>
+        <p class="kicker">A single research page for any biotech ticker — drug-by-drug pipeline, every upcoming readout, and a transparent rNPV model you can tune yourself.</p>
+        <div class="search">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input placeholder="Enter ticker or company name" />
+          <span class="go">↵ Enter</span>
+        </div>
+        <div class="coverage">
+          <div class="item"><div class="n">1,284</div><div class="l">biotech tickers</div></div>
+          <div class="item"><div class="n">14</div><div class="l">event sources</div></div>
+          <div class="item"><div class="n">38</div><div class="l">catalysts this week</div></div>
+          <div class="item"><div class="n">Hourly</div><div class="l">refresh cadence</div></div>
+        </div>
+      </div>
+    </div>
+    <p class="dir-notes">
+      <strong>Feel:</strong> Research paper, not dashboard. Instrument Serif display paired with Geist supporting copy. Reads slow, feels weighty — like the kind of site a long/short fund's analyst would send around. <strong>Best for:</strong> credibility and "we do this seriously." <strong>Risk:</strong> slightly slower to reach the search; might feel mismatched with the more technical pages inside.
+    </p>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- DIRECTION 4 — SPLIT / LIVE PREVIEW                             -->
+  <!-- ============================================================= -->
+  <div class="direction d4">
+    <div class="dir-label">
+      <span><span class="pill">04</span> &nbsp;Split — "see it working"</span>
+      <span>Pitch on the left, live company preview on the right</span>
+    </div>
+    <div class="dir-frame">
+      <div class="nav">
+        <div class="brand">bioticker<span class="brand-mark"><svg width="15" height="15" viewBox="0 0 28 28"><circle cx="14" cy="14" r="5" fill="currentColor"/><g fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/><g transform="rotate(60 14 14)"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/></g><g transform="rotate(120 14 14)"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/></g><g transform="rotate(180 14 14)"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/></g><g transform="rotate(240 14 14)"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/></g><g transform="rotate(300 14 14)"><line x1="14" y1="14" x2="14" y2="4"/><circle cx="14" cy="3" r="2"/></g></g></svg></span></div>
+        <div class="nav-links"><a>Catalysts</a><a>Watchlist</a><a>Methodology</a></div>
+        <div class="nav-login">Log in</div>
+      </div>
+      <div class="hero">
+        <div class="left">
+          <div class="eyebrow">Due diligence · faster</div>
+          <h1>Every biotech, decoded in one page.</h1>
+          <p class="copy">Pipeline, upcoming catalysts, cash runway, and risk-adjusted valuation — for any biotech ticker, in seconds.</p>
+          <div class="s-row">
+            <input placeholder="Enter a ticker — CRSP, Vertex, Moderna…" />
+            <button>Analyze →</button>
+          </div>
+          <div class="examples">
+            <span class="ex">CRSP</span><span class="ex">SRPT</span><span class="ex">BEAM</span><span class="ex">VRTX</span><span class="ex">MRNA</span>
+          </div>
+        </div>
+        <div class="right">
+          <div class="preview">
+            <div class="bar">bioticker.app/company/CRSP</div>
+            <div class="body">
+              <div class="pv-head">
+                <div><span class="tkr">CRSP</span><span class="name">CRISPR Therapeutics</span></div>
+                <div><span class="px">$61.42</span><span class="chg">+3.18%</span></div>
+              </div>
+              <div class="chart">
+                <svg viewBox="0 0 400 120" preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id="pvg" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stop-color="#3fb950" stop-opacity="0.3"/>
+                      <stop offset="100%" stop-color="#3fb950" stop-opacity="0"/>
+                    </linearGradient>
+                  </defs>
+                  <path d="M0,80 L30,72 L60,78 L90,60 L120,65 L150,45 L180,55 L210,40 L240,48 L270,30 L300,35 L330,25 L360,18 L400,22 L400,120 L0,120 Z" fill="url(#pvg)"/>
+                  <path d="M0,80 L30,72 L60,78 L90,60 L120,65 L150,45 L180,55 L210,40 L240,48 L270,30 L300,35 L330,25 L360,18 L400,22" stroke="#3fb950" stroke-width="1.8" fill="none"/>
+                  <circle cx="210" cy="40" r="3" fill="#bc8cff"/>
+                  <circle cx="300" cy="35" r="3" fill="#58a6ff"/>
+                </svg>
+              </div>
+              <div class="pv-pipeline">
+                <div class="row">
+                  <span class="drug">Casgevy</span>
+                  <span class="phase-bar"><span class="fill" style="width:100%"></span></span>
+                  <span class="phase">Approved</span>
+                </div>
+                <div class="row">
+                  <span class="drug">CTX112</span>
+                  <span class="phase-bar"><span class="fill" style="width:55%"></span></span>
+                  <span class="phase">Ph1/2</span>
+                </div>
+                <div class="row">
+                  <span class="drug">CTX131</span>
+                  <span class="phase-bar"><span class="fill" style="width:32%"></span></span>
+                  <span class="phase">Ph1</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="dir-notes">
+      <strong>Feel:</strong> Closest to the current page but with a live product preview replacing the scrolling catalyst tape. Shows visitors exactly what they'll get without making them click. <strong>Best for:</strong> traffic that might bounce — it demonstrates the payoff in the first fold. <strong>Risk:</strong> more code to maintain; the preview needs to stay in sync with the real company page as that evolves.
+    </p>
+  </div>
+</div>
+</body>
+</html>

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "BioRadar — biotech investor research",
+  title: "BioTicker — biotech investor research",
   description:
     "Pipeline, catalysts, and risk-adjusted valuation for any biotech ticker.",
 };
