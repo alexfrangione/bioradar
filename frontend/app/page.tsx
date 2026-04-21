@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { searchTickers, type SearchHit } from "@/lib/api";
-import Brand, { BrandMark } from "@/components/Brand";
+import { BrandMark } from "@/components/Brand";
+import SiteNav from "@/components/SiteNav";
 
 // ---------------------------------------------------------------------------
 // Static marketing data
@@ -133,34 +134,10 @@ export default function LandingPage() {
   return (
     <main className="min-h-screen flex flex-col">
       {/* ==================== NAV ==================== */}
-      <nav className="flex items-center justify-between px-8 py-4 border-b border-border-subtle">
-        <Link href="/" className="inline-flex">
-          <Brand size="nav" />
-        </Link>
-        <div className="flex items-center gap-6">
-          <Link
-            href="/catalysts"
-            className="text-text-dim hover:text-text text-[13px] font-medium"
-          >
-            Catalysts
-          </Link>
-          <Link
-            href="/watchlist"
-            className="text-text-dim hover:text-text text-[13px] font-medium"
-          >
-            Watchlist
-          </Link>
-          <a className="text-text-dim hover:text-text text-[13px] font-medium cursor-pointer">
-            Methodology
-          </a>
-          <button className="px-3.5 py-1.5 text-[13px] font-medium bg-bg-elev border border-border rounded-lg hover:bg-bg-elev2 text-text">
-            Log in
-          </button>
-        </div>
-      </nav>
+      <SiteNav />
 
       {/* ==================== TICKER TAPE ==================== */}
-      <div className="bg-bg-elev border-b border-border py-2.5 overflow-hidden whitespace-nowrap">
+      <div className="bg-bg-app border-b border-border-subtle py-2.5 overflow-hidden whitespace-nowrap">
         <div className="bt-tape-inner inline-flex gap-9 pl-9">
           {[...TAPE, ...TAPE].map((t, i) => (
             <span

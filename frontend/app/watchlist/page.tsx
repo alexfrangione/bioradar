@@ -10,7 +10,7 @@ import {
 } from "@/lib/api";
 import { getWatchlist, subscribeWatchlist } from "@/lib/watchlist";
 import StarButton from "@/components/StarButton";
-import Brand from "@/components/Brand";
+import SiteNav from "@/components/SiteNav";
 
 type View = "table" | "grid";
 
@@ -92,25 +92,7 @@ export default function WatchlistPage() {
   return (
     <main className="min-h-screen">
       {/* Top nav */}
-      <nav className="flex items-center justify-between px-8 py-4 border-b border-border-subtle">
-        <Link href="/" className="inline-flex">
-          <Brand size="nav" />
-        </Link>
-        <div className="flex items-center gap-6">
-          <Link
-            href="/"
-            className="text-text-dim hover:text-text text-[13px]"
-          >
-            Search
-          </Link>
-          <Link
-            href="/catalysts"
-            className="text-text-dim hover:text-text text-[13px]"
-          >
-            Calendar
-          </Link>
-        </div>
-      </nav>
+      <SiteNav />
 
       {/* Header row */}
       <div className="px-8 py-6 border-b border-border-subtle flex items-end justify-between gap-4 flex-wrap">

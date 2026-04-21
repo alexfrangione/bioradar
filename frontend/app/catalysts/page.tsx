@@ -11,7 +11,8 @@ import {
   type EarningsEvent,
 } from "@/lib/api";
 import { getWatchlist, subscribeWatchlist } from "@/lib/watchlist";
-import Brand from "@/components/Brand";
+import { POPULAR_TICKERS } from "@/lib/universe";
+import SiteNav from "@/components/SiteNav";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -46,28 +47,6 @@ const SCOPE_LABEL: Record<Scope, string> = {
   month: "This month",
   quarter: "This quarter",
 };
-
-// Curated universe for the default "Popular biotech" view so the calendar is
-// useful out-of-the-box — no empty state for first-time visitors. Covers the
-// liquid mid/large-cap biotechs with the most catalyst density. The watchlist
-// view still shows whatever the user has starred.
-const POPULAR_TICKERS = [
-  "MRNA",
-  "VRTX",
-  "CRSP",
-  "BEAM",
-  "SRPT",
-  "NTLA",
-  "REGN",
-  "BNTX",
-  "EDIT",
-  "BIIB",
-  "ALNY",
-  "MDGL",
-  "ARWR",
-  "INSM",
-  "GILD",
-];
 
 // ---------------------------------------------------------------------------
 // Tiering
@@ -300,25 +279,7 @@ export default function CatalystsPage() {
   return (
     <main className="min-h-screen">
       {/* ==================== NAV ==================== */}
-      <nav className="flex items-center justify-between px-8 py-4 border-b border-border-subtle">
-        <Link href="/" className="inline-flex">
-          <Brand size="nav" />
-        </Link>
-        <div className="flex items-center gap-6">
-          <Link
-            href="/"
-            className="text-text-dim hover:text-text text-[13px] font-medium"
-          >
-            Search
-          </Link>
-          <Link
-            href="/watchlist"
-            className="text-text-dim hover:text-text text-[13px] font-medium"
-          >
-            Watchlist
-          </Link>
-        </div>
-      </nav>
+      <SiteNav />
 
       <div className="max-w-[1200px] mx-auto px-8 pt-9 pb-20">
         {/* ==================== HEADER ==================== */}

@@ -5,7 +5,7 @@ import StockChart from "@/components/StockChart";
 import StarButton from "@/components/StarButton";
 import Valuation from "@/components/Valuation";
 import PeerComparison from "@/components/PeerComparison";
-import Brand from "@/components/Brand";
+import SiteNav from "@/components/SiteNav";
 
 // Next.js 14 dynamic route — `params.ticker` from the URL.
 type Params = { ticker: string };
@@ -22,31 +22,7 @@ export default async function CompanyPage({ params }: { params: Params }) {
   return (
     <main className="min-h-screen">
       {/* Top nav */}
-      <nav className="flex items-center justify-between px-8 py-4 border-b border-border-subtle">
-        <Link href="/" className="inline-flex">
-          <Brand size="nav" />
-        </Link>
-        <div className="flex items-center gap-6">
-          <Link
-            href="/catalysts"
-            className="text-text-dim hover:text-text text-[13px]"
-          >
-            Calendar
-          </Link>
-          <Link
-            href="/watchlist"
-            className="text-text-dim hover:text-text text-[13px]"
-          >
-            Watchlist
-          </Link>
-          <Link
-            href="/"
-            className="text-text-dim hover:text-text text-[13px]"
-          >
-            ← Back to search
-          </Link>
-        </div>
-      </nav>
+      <SiteNav />
 
       {/* Error: backend unreachable */}
       {company === null && <BackendDown ticker={ticker} />}
