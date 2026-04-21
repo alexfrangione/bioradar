@@ -26,7 +26,8 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from edgar import get_edgar_company_data, get_edgar_earnings
+from edgar import get_edgar_catalysts, get_edgar_company_data, get_edgar_earnings
+from finnhub import get_finnhub_catalysts
 
 # Always load .env from next to main.py — not from the process CWD.
 # This way the key is found whether you run uvicorn from backend/ or the repo root.
@@ -1520,17 +1521,193 @@ async def get_quote(ticker: str) -> dict:
 # ---------------------------------------------------------------------------
 # Catalysts
 # ---------------------------------------------------------------------------
+
+# Words we strip before hashing a title for dedup — they add no signal.
+_DEDUP_STOPWORDS = {
+    "the", "and", "for", "with", "from", "trial", "trials", "phase",
+    "readout", "data", "study", "results", "interim", "topline",
+}
+
+
+def _title_tokens(title: str) -> set[str]:
+    """Significant 4+ char lowercase words from a title — used for fuzzy
+    dedup between hand-curated and derived catalyst events.
+    """
+    words = re.findall(r"\b[\w\-]{4,}\b", title.lower())
+    return {w for w in words if w not in _DEDUP_STOPWORDS}
+
+
+def _dates_within(d1: str, d2: str, days: int) -> bool:
+    """True if two ISO-date strings are within `days` of each other."""
+    try:
+        a = datetime.strptime(d1, "%Y-%m-%d").date()
+        b = datetime.strptime(d2, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return False
+    return abs((a - b).days) <= days
+
+
+async def _derive_catalysts_from_pipeline(ticker: str) -> list[dict]:
+    """Derive catalyst events from the company's ClinicalTrials.gov pipeline.
+
+    For each drug aggregate we emit at most one event, chosen by trial state:
+      - If all trials are stopped       → "failure" event at the most recent date
+      - Else if next_completion is future → upcoming "readout" event
+      - Else (all trials are in the past) → past "readout" (low impact)
+
+    Impact is driven by the drug's highest phase — Ph3+ events are "high",
+    Ph2 is "medium", earlier is "low". The summary line embeds the indication
+    and active-trial count so the calendar row is self-explanatory.
+    """
+    try:
+        pipeline = await get_pipeline(ticker)
+    except Exception as exc:  # noqa: BLE001 — defensive: never let calendar 500
+        print(f"[bioradar] catalyst derivation: pipeline fetch failed for {ticker}: {exc}")
+        return []
+
+    drugs = (pipeline or {}).get("drugs") or []
+    if not drugs:
+        return []
+
+    today_iso = date.today().isoformat()
+    events: list[dict] = []
+
+    for d in drugs:
+        next_date = d.get("next_completion_date")
+        if not next_date:
+            continue
+
+        drug_name = d.get("drug") or "Unnamed asset"
+        phase = d.get("highest_phase") or "N/A"
+        phase_rank = int(d.get("highest_phase_rank") or 0)
+        indication = d.get("indication")
+        counts = d.get("status_counts") or {}
+        trial_count = int(d.get("trial_count") or 0)
+
+        impact = "high" if phase_rank >= 4 else "medium" if phase_rank >= 3 else "low"
+
+        active = int(counts.get("active") or 0)
+        completed = int(counts.get("completed") or 0)
+        stopped = int(counts.get("stopped") or 0)
+        planned = int(counts.get("planned") or 0)
+
+        # Only call the program "all stopped" if nothing else is live or done —
+        # a planned (NOT_YET_RECRUITING) trial means the drug is still in play.
+        all_stopped = (
+            stopped > 0 and active == 0 and completed == 0 and planned == 0
+        )
+        is_future = next_date >= today_iso
+
+        # Build a concise summary line — always include the phase + trial
+        # count so the click-to-expand is never just a blank "ClinicalTrials.gov".
+        summary_bits: list[str] = []
+        if indication:
+            summary_bits.append(indication)
+        summary_bits.append(f"{phase} program")
+        if is_future and active:
+            summary_bits.append(f"{active} active trial{'s' if active != 1 else ''}")
+        else:
+            summary_bits.append(f"{trial_count} trial{'s' if trial_count != 1 else ''}")
+        summary_bits.append("ClinicalTrials.gov")
+
+        if all_stopped:
+            stop_summary = (
+                f"{indication + ' · ' if indication else ''}"
+                f"All {trial_count} {phase} trial{'s' if trial_count != 1 else ''} "
+                f"terminated, suspended, or withdrawn · ClinicalTrials.gov"
+            )
+            events.append({
+                "date": next_date,
+                "title": f"{drug_name} — {phase} trials stopped",
+                "type": "failure",
+                "impact": "medium",
+                "summary": stop_summary,
+                "source": "ctgov-derived",
+            })
+        elif is_future:
+            events.append({
+                "date": next_date,
+                "title": f"{drug_name} — {phase} readout window",
+                "type": "readout",
+                "impact": impact,
+                "summary": " · ".join(summary_bits),
+                "source": "ctgov-derived",
+            })
+        else:
+            # Past readout — surface but at low impact; the investor-relevant
+            # question is usually "what did we learn?" not "what's coming?"
+            events.append({
+                "date": next_date,
+                "title": f"{drug_name} — {phase} readout complete",
+                "type": "readout",
+                "impact": "low",
+                "summary": " · ".join(summary_bits),
+                "source": "ctgov-derived",
+            })
+
+    return events
+
+
+def _merge_catalysts(seed: list[dict], derived: list[dict]) -> list[dict]:
+    """Merge hand-curated (seed) and derived events, preferring seed on
+    conflict. Two events are considered a conflict if they're within 31 days
+    AND their title tokens share at least one significant word (typically the
+    drug name).
+    """
+    seed_signatures = [
+        {"date": s.get("date"), "tokens": _title_tokens(s.get("title") or "")}
+        for s in seed
+        if s.get("date")
+    ]
+
+    merged: list[dict] = list(seed)
+    for d in derived:
+        d_date = d.get("date")
+        d_tokens = _title_tokens(d.get("title") or "")
+        if not d_date:
+            continue
+        is_dup = False
+        for sig in seed_signatures:
+            if not sig["tokens"] or not d_tokens:
+                continue
+            if _dates_within(sig["date"], d_date, 31) and (sig["tokens"] & d_tokens):
+                is_dup = True
+                break
+        if not is_dup:
+            merged.append(d)
+    return merged
+
+
 @app.get("/api/company/{ticker}/catalysts")
-def get_catalysts(ticker: str) -> dict:
+async def get_catalysts(ticker: str) -> dict:
     ticker = ticker.upper().strip()
-    events = SEED_CATALYSTS.get(ticker, [])
+    seed = SEED_CATALYSTS.get(ticker, [])
+    # Tag seed events with a source so clients can surface provenance.
+    seed = [{**e, "source": e.get("source", "curated")} for e in seed]
+
+    # Fetch all three machine-derived layers in parallel. Every layer is
+    # best-effort; a failure in any one can't 500 the calendar.
+    edgar_task = asyncio.create_task(_safe_edgar_catalysts(ticker))
+    ctgov_task = asyncio.create_task(_derive_catalysts_from_pipeline(ticker))
+    news_task = asyncio.create_task(_safe_finnhub_catalysts(ticker))
+    edgar_events, ctgov_events, news_events = await asyncio.gather(
+        edgar_task, ctgov_task, news_task
+    )
+
+    # Priority order: seed > edgar-8k > ctgov-derived > news. Each later
+    # layer only contributes events that don't collide with any higher-
+    # priority entry. News is lowest-priority because headlines are the
+    # noisiest signal — SEC filings and trial registry data beat press.
+    merged = _merge_catalysts(seed, edgar_events)
+    merged = _merge_catalysts(merged, ctgov_events)
+    merged = _merge_catalysts(merged, news_events)
 
     today = datetime.utcnow().date()
     enriched = []
-    for e in events:
+    for e in merged:
         try:
             d = datetime.strptime(e["date"], "%Y-%m-%d").date()
-        except ValueError:
+        except (ValueError, TypeError, KeyError):
             continue
         enriched.append({**e, "past": d < today})
 
@@ -1541,6 +1718,24 @@ def get_catalysts(ticker: str) -> dict:
         "count": len(enriched),
         "events": enriched,
     }
+
+
+async def _safe_edgar_catalysts(ticker: str) -> list[dict]:
+    """Wrapper so an EDGAR outage doesn't break the whole catalyst endpoint."""
+    try:
+        return await get_edgar_catalysts(ticker)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[bioradar] edgar catalyst fetch failed for {ticker}: {exc}")
+        return []
+
+
+async def _safe_finnhub_catalysts(ticker: str) -> list[dict]:
+    """Wrapper so a Finnhub outage / rate-limit doesn't break the calendar."""
+    try:
+        return await get_finnhub_catalysts(ticker)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[bioradar] finnhub catalyst fetch failed for {ticker}: {exc}")
+        return []
 
 
 # ---------------------------------------------------------------------------

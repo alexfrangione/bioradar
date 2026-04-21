@@ -42,3 +42,7 @@ yarn-error.log*
 coverage/
 .coverage
 htmlcov/
+
+# === Scratch / design mockups ===
+# Standalone HTML mockups used during design — not part of the shipped app.
+chart-mockups.html

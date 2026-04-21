@@ -6,6 +6,7 @@ import {
   getCatalysts,
   getEarnings,
   type CatalystEvent,
+  type CatalystSource,
   type CatalystType,
   type EarningsEvent,
 } from "@/lib/api";
@@ -22,6 +23,7 @@ type TimelineEvent = {
   impact: "high" | "medium" | "low";
   past: boolean;
   summary?: string;
+  source?: CatalystSource | "earnings";
 };
 
 type Filter = "all" | "readout" | "fda" | "earnings" | "other";
@@ -83,6 +85,7 @@ export default function CatalystsPage() {
               impact: e.impact,
               past: e.past,
               summary: e.summary,
+              source: e.source,
             }),
           );
           const earningsEvents: TimelineEvent[] = (earn?.events ?? []).map(
@@ -93,6 +96,7 @@ export default function CatalystsPage() {
               type: "earnings",
               impact: "medium",
               past: e.past,
+              source: "earnings",
             }),
           );
           return [...catalystEvents, ...earningsEvents];
@@ -330,8 +334,9 @@ function EventRow({ event }: { event: TimelineEvent }) {
         )}
       </div>
 
-      {/* Type pill + impact */}
+      {/* Type pill + impact + source */}
       <div className="flex items-center gap-2 flex-shrink-0">
+        {event.source && <SourceChip source={event.source} />}
         <TypePill type={event.type} />
         {!event.past && event.impact === "high" && (
           <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-accent-red/15 text-accent-red border border-accent-red/30">
@@ -375,6 +380,35 @@ const TYPE_LABEL: Record<TimelineEvent["type"], string> = {
   "earnings": "Earnings",
   "other": "Other",
 };
+
+// Source chip — provenance signal so the user can tell curated from derived
+// events at a glance. Curated events are the highest-confidence signal;
+// everything else carries its data source as a subtle badge.
+const SOURCE_LABEL: Record<NonNullable<TimelineEvent["source"]>, string> = {
+  curated: "Curated",
+  "ctgov-derived": "Trials",
+  "edgar-8k": "8-K",
+  news: "News",
+  earnings: "EDGAR",
+};
+
+function SourceChip({ source }: { source: NonNullable<TimelineEvent["source"]> }) {
+  // Curated entries are the most trustworthy — give them a faint purple tint.
+  // Everything else stays neutral so the calendar doesn't look noisy.
+  const isCurated = source === "curated";
+  return (
+    <span
+      className={`px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wider border ${
+        isCurated
+          ? "bg-accent-purple/10 text-accent-purple border-accent-purple/30"
+          : "bg-bg-elev text-text-dimmer border-border-subtle"
+      }`}
+      title={`Source: ${SOURCE_LABEL[source]}`}
+    >
+      {SOURCE_LABEL[source]}
+    </span>
+  );
+}
 
 function TypeDot({ type }: { type: TimelineEvent["type"] }) {
   const style = TYPE_STYLE[type] ?? TYPE_STYLE.other;

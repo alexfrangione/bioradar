@@ -132,6 +132,12 @@ export type CatalystType =
   | "readout" // legacy
   | "other";
 
+export type CatalystSource =
+  | "curated" // hand-written in SEED_CATALYSTS
+  | "ctgov-derived" // inferred from ClinicalTrials.gov pipeline data
+  | "edgar-8k" // from SEC EDGAR 8-K filings (phase 2)
+  | "news"; // from news API (phase 3)
+
 export type CatalystEvent = {
   date: string;
   title: string;
@@ -139,6 +145,10 @@ export type CatalystEvent = {
   impact: "high" | "medium" | "low";
   past: boolean;
   summary?: string;
+  source?: CatalystSource;
+  /** Link back to source-of-truth (e.g. SEC filing). Only present on
+   * machine-derived events where we have a real URL. */
+  url?: string | null;
 };
 
 export type CatalystsResponse = {
