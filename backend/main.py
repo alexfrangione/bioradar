@@ -1,25 +1,30 @@
 """
 BioRadar API — FastAPI backend.
 
-This is the starter scaffold. It exposes:
-  GET  /                       -> service info
-  GET  /api/health             -> health check (used by uptime monitors)
-  GET  /api/company/{ticker}   -> basic company info (seed data for now)
-
-Real data sources (ClinicalTrials.gov, SEC EDGAR, yfinance) will be wired in
-in the next iteration.
+Endpoints:
+  GET  /                                     -> service info
+  GET  /api/health                           -> health check
+  GET  /api/companies                        -> list of seeded tickers
+  GET  /api/company/{ticker}                 -> company fundamentals (seed)
+  GET  /api/company/{ticker}/pipeline        -> clinical trial pipeline (live)
+  GET  /api/company/{ticker}/prices          -> daily price history (yfinance)
+  GET  /api/company/{ticker}/catalysts       -> upcoming catalyst events (seed)
 """
 
 import os
+from datetime import datetime, timedelta
+from typing import Any
+
+import httpx
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
 
 load_dotenv()
 
 app = FastAPI(
     title="BioRadar API",
-    version="0.1.0",
+    version="0.2.0",
     description="Biotech investor research platform — backend API.",
 )
 
@@ -28,22 +33,20 @@ app = FastAPI(
 # ---------------------------------------------------------------------------
 frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
 allowed_origins = [frontend_url, "http://localhost:3000"]
-
-# If FRONTEND_URL is set, also allow variations (with/without trailing slash)
 if frontend_url and frontend_url not in allowed_origins:
     allowed_origins.append(frontend_url.rstrip("/"))
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_origin_regex=r"https://.*\.vercel\.app",  # allow Vercel preview URLs
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # ---------------------------------------------------------------------------
-# Seed data — replaced by live data in the next iteration.
+# Seed data
 # ---------------------------------------------------------------------------
 SEED_COMPANIES: dict[str, dict] = {
     "CRSP": {
@@ -102,7 +105,7 @@ SEED_COMPANIES: dict[str, dict] = {
         ),
         "market_cap_usd": 112_000_000_000,
         "cash_usd": 13_800_000_000,
-        "quarterly_burn_usd": 0,  # profitable
+        "quarterly_burn_usd": 0,
         "runway_months": None,
         "health": "strong",
     },
@@ -123,17 +126,174 @@ SEED_COMPANIES: dict[str, dict] = {
     },
 }
 
+# ClinicalTrials.gov knows sponsor names, not tickers, so we map.
+TICKER_TO_SPONSOR: dict[str, str] = {
+    "CRSP": "CRISPR Therapeutics",
+    "SRPT": "Sarepta Therapeutics",
+    "BEAM": "Beam Therapeutics",
+    "VRTX": "Vertex Pharmaceuticals",
+    "MRNA": "Moderna",
+}
+
+# Hand-curated catalyst events — real historical + near-term events.
+# `type` drives the color/icon on the chart overlay.
+# `impact`: "high" | "medium" | "low"
+SEED_CATALYSTS: dict[str, list[dict]] = {
+    "CRSP": [
+        {
+            "date": "2023-12-08",
+            "title": "Casgevy FDA approval (SCD)",
+            "type": "approval",
+            "impact": "high",
+        },
+        {
+            "date": "2024-01-16",
+            "title": "Casgevy FDA approval (beta-thalassemia)",
+            "type": "approval",
+            "impact": "high",
+        },
+        {
+            "date": "2025-06-10",
+            "title": "CTX112 Phase 1 readout (B-cell malignancies)",
+            "type": "readout",
+            "impact": "medium",
+        },
+        {
+            "date": "2026-02-20",
+            "title": "VERVE-102 Phase 1b data (cardiovascular)",
+            "type": "readout",
+            "impact": "medium",
+        },
+    ],
+    "SRPT": [
+        {
+            "date": "2023-06-22",
+            "title": "Elevidys accelerated FDA approval",
+            "type": "approval",
+            "impact": "high",
+        },
+        {
+            "date": "2024-06-20",
+            "title": "Elevidys full approval + label expansion",
+            "type": "approval",
+            "impact": "high",
+        },
+        {
+            "date": "2025-10-15",
+            "title": "SRP-9003 Phase 3 interim (LGMD2E)",
+            "type": "readout",
+            "impact": "medium",
+        },
+    ],
+    "BEAM": [
+        {
+            "date": "2024-12-09",
+            "title": "BEAM-101 Phase 1/2 data (SCD)",
+            "type": "readout",
+            "impact": "high",
+        },
+        {
+            "date": "2026-01-15",
+            "title": "BEAM-302 Phase 1 first data (AATD)",
+            "type": "readout",
+            "impact": "medium",
+        },
+    ],
+    "VRTX": [
+        {
+            "date": "2024-01-30",
+            "title": "Casgevy launch — first patient dosed",
+            "type": "launch",
+            "impact": "medium",
+        },
+        {
+            "date": "2025-01-30",
+            "title": "Suzetrigine FDA approval (acute pain)",
+            "type": "approval",
+            "impact": "high",
+        },
+        {
+            "date": "2025-12-15",
+            "title": "VX-880 Phase 1/2 update (T1D)",
+            "type": "readout",
+            "impact": "medium",
+        },
+    ],
+    "MRNA": [
+        {
+            "date": "2023-08-18",
+            "title": "mRNA-1345 RSV Phase 3 positive",
+            "type": "readout",
+            "impact": "high",
+        },
+        {
+            "date": "2024-05-31",
+            "title": "mRESVIA (RSV) FDA approval",
+            "type": "approval",
+            "impact": "high",
+        },
+        {
+            "date": "2025-07-10",
+            "title": "mRNA-4157 (INT) Phase 3 interim (melanoma)",
+            "type": "readout",
+            "impact": "high",
+        },
+    ],
+}
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+_PHASE_DISPLAY = {
+    "EARLY_PHASE1": "Early Phase 1",
+    "PHASE1": "Phase 1",
+    "PHASE2": "Phase 2",
+    "PHASE3": "Phase 3",
+    "PHASE4": "Phase 4",
+    "NA": "N/A",
+}
+
+_PHASE_RANK = {
+    "NA": 0,
+    "EARLY_PHASE1": 1,
+    "PHASE1": 2,
+    "PHASE2": 3,
+    "PHASE3": 4,
+    "PHASE4": 5,
+}
+
+_STATUS_DISPLAY = {
+    "RECRUITING": "Recruiting",
+    "ACTIVE_NOT_RECRUITING": "Active",
+    "ENROLLING_BY_INVITATION": "Enrolling",
+    "NOT_YET_RECRUITING": "Not yet recruiting",
+    "COMPLETED": "Completed",
+    "SUSPENDED": "Suspended",
+    "TERMINATED": "Terminated",
+    "WITHDRAWN": "Withdrawn",
+    "UNKNOWN": "Unknown",
+}
+
+
+def _pretty_phase(p: str) -> str:
+    return _PHASE_DISPLAY.get(p, p.replace("_", " ").title())
+
+
+def _pretty_status(s: str) -> str:
+    return _STATUS_DISPLAY.get(s, s.replace("_", " ").title())
+
+
+def _phase_rank(phases: list[str]) -> int:
+    return max((_PHASE_RANK.get(p, 0) for p in phases), default=0)
+
 
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 @app.get("/")
 def root() -> dict:
-    return {
-        "service": "BioRadar API",
-        "version": "0.1.0",
-        "docs": "/docs",
-    }
+    return {"service": "BioRadar API", "version": "0.2.0", "docs": "/docs"}
 
 
 @app.get("/api/health")
@@ -141,13 +301,21 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+@app.get("/api/companies")
+def list_companies() -> dict:
+    return {
+        "companies": [
+            {"ticker": t, "name": c["name"]}
+            for t, c in SEED_COMPANIES.items()
+        ]
+    }
+
+
 @app.get("/api/company/{ticker}")
 def get_company(ticker: str) -> dict:
     ticker = ticker.upper().strip()
     company = SEED_COMPANIES.get(ticker)
     if company is None:
-        # Return a placeholder so the frontend can still render a shell for
-        # any ticker the user searches. Real lookup comes in next iteration.
         return {
             "ticker": ticker,
             "name": None,
@@ -160,12 +328,231 @@ def get_company(ticker: str) -> dict:
     return company
 
 
-@app.get("/api/companies")
-def list_companies() -> dict:
-    """List tickers with seed data (used by the landing page chips)."""
+# ---------------------------------------------------------------------------
+# Pipeline — live from ClinicalTrials.gov v2 API
+# ---------------------------------------------------------------------------
+@app.get("/api/company/{ticker}/pipeline")
+async def get_pipeline(ticker: str, limit: int = 25) -> dict:
+    ticker = ticker.upper().strip()
+    sponsor = TICKER_TO_SPONSOR.get(ticker)
+    if not sponsor:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No sponsor mapping for ticker {ticker!r}.",
+        )
+
+    url = "https://clinicaltrials.gov/api/v2/studies"
+    params = {
+        "query.lead": sponsor,
+        "pageSize": min(max(limit, 1), 100),
+        "format": "json",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.get(url, params=params)
+            r.raise_for_status()
+            data = r.json()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"ClinicalTrials.gov request failed: {exc}",
+        )
+
+    studies_raw = data.get("studies", [])
+    trials: list[dict[str, Any]] = []
+
+    for s in studies_raw:
+        proto = s.get("protocolSection", {}) or {}
+        ident = proto.get("identificationModule", {}) or {}
+        status = proto.get("statusModule", {}) or {}
+        design = proto.get("designModule", {}) or {}
+        conditions_mod = proto.get("conditionsModule", {}) or {}
+        interventions_mod = proto.get("armsInterventionsModule", {}) or {}
+
+        phases = design.get("phases") or []
+        conditions = conditions_mod.get("conditions") or []
+
+        drug_names: list[str] = []
+        for iv in interventions_mod.get("interventions") or []:
+            if iv.get("type") in {"DRUG", "BIOLOGICAL", "GENETIC"}:
+                name = iv.get("name")
+                if name:
+                    drug_names.append(name)
+
+        pcd = status.get("primaryCompletionDateStruct", {}) or {}
+        completion_date = pcd.get("date")
+
+        trials.append(
+            {
+                "nct_id": ident.get("nctId"),
+                "title": ident.get("briefTitle"),
+                "drug": drug_names[0] if drug_names else None,
+                "drugs": drug_names,
+                "indication": conditions[0] if conditions else None,
+                "conditions": conditions,
+                "phase": _pretty_phase(phases[0]) if phases else "N/A",
+                "phases_raw": phases,
+                "phase_rank": _phase_rank(phases),
+                "status": _pretty_status(status.get("overallStatus", "UNKNOWN")),
+                "status_raw": status.get("overallStatus"),
+                "primary_completion_date": completion_date,
+                "url": (
+                    f"https://clinicaltrials.gov/study/{ident.get('nctId')}"
+                    if ident.get("nctId")
+                    else None
+                ),
+            }
+        )
+
+    # Sort by phase (late-stage first), then by completion date.
+    trials.sort(
+        key=lambda t: (
+            -t["phase_rank"],
+            t.get("primary_completion_date") or "9999-99-99",
+        )
+    )
+
     return {
-        "companies": [
-            {"ticker": t, "name": c["name"]}
-            for t, c in SEED_COMPANIES.items()
-        ]
+        "ticker": ticker,
+        "sponsor": sponsor,
+        "count": len(trials),
+        "trials": trials,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Price history — yfinance
+# ---------------------------------------------------------------------------
+def _yf_session():
+    """
+    Build a browser-impersonating session so Yahoo doesn't rate-limit us.
+    Falls back to no session if curl_cffi isn't installed yet.
+    """
+    try:
+        from curl_cffi import requests as curl_requests  # type: ignore
+
+        return curl_requests.Session(impersonate="chrome")
+    except Exception:  # noqa: BLE001
+        return None
+
+
+@app.get("/api/company/{ticker}/prices")
+def get_prices(ticker: str, period: str = "2y") -> dict:
+    """
+    Returns daily close prices for the ticker.
+    `period` is any yfinance period string: 1mo, 3mo, 6mo, 1y, 2y, 5y, max.
+    """
+    ticker = ticker.upper().strip()
+
+    try:
+        import yfinance as yf  # type: ignore
+    except ImportError:
+        raise HTTPException(
+            status_code=500,
+            detail="yfinance not installed on the server.",
+        )
+
+    allowed = {"1mo", "3mo", "6mo", "1y", "2y", "5y", "max"}
+    if period not in allowed:
+        period = "2y"
+
+    session = _yf_session()
+
+    df = None
+    last_err: str | None = None
+
+    # Attempt 1: yf.download — usually the most reliable entry point.
+    try:
+        kwargs: dict[str, Any] = {
+            "tickers": ticker,
+            "period": period,
+            "auto_adjust": True,
+            "progress": False,
+            "threads": False,
+        }
+        if session is not None:
+            kwargs["session"] = session
+        df = yf.download(**kwargs)
+    except Exception as exc:  # noqa: BLE001
+        last_err = f"yf.download: {exc}"
+
+    # Attempt 2: fall back to Ticker.history
+    if df is None or df.empty:
+        try:
+            t = yf.Ticker(ticker, session=session) if session else yf.Ticker(ticker)
+            df = t.history(period=period, auto_adjust=True)
+        except Exception as exc:  # noqa: BLE001
+            last_err = f"Ticker.history: {exc}"
+
+    if df is None or df.empty:
+        return {
+            "ticker": ticker,
+            "period": period,
+            "count": 0,
+            "points": [],
+            "error": last_err
+            or "No data returned from yfinance. Yahoo may be rate-limiting.",
+        }
+
+    # yf.download with a single ticker returns flat columns; with multi-ticker
+    # it returns a MultiIndex. We always pass one ticker, so flatten defensively.
+    if hasattr(df.columns, "nlevels") and df.columns.nlevels > 1:
+        df.columns = df.columns.get_level_values(0)
+
+    points = []
+    for idx, row in df.iterrows():
+        close_val = row.get("Close")
+        if close_val is None:
+            continue
+        try:
+            close_f = float(close_val)
+        except (TypeError, ValueError):
+            continue
+        if close_f != close_f:  # NaN check
+            continue
+        vol = row.get("Volume")
+        try:
+            vol_i = int(vol) if vol is not None and vol == vol else 0
+        except (TypeError, ValueError):
+            vol_i = 0
+        points.append(
+            {
+                "date": idx.strftime("%Y-%m-%d"),
+                "close": round(close_f, 2),
+                "volume": vol_i,
+            }
+        )
+
+    return {
+        "ticker": ticker,
+        "period": period,
+        "count": len(points),
+        "points": points,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Catalysts — seeded for now, real data layer later.
+# ---------------------------------------------------------------------------
+@app.get("/api/company/{ticker}/catalysts")
+def get_catalysts(ticker: str) -> dict:
+    ticker = ticker.upper().strip()
+    events = SEED_CATALYSTS.get(ticker, [])
+
+    today = datetime.utcnow().date()
+    enriched = []
+    for e in events:
+        try:
+            d = datetime.strptime(e["date"], "%Y-%m-%d").date()
+        except ValueError:
+            continue
+        enriched.append({**e, "past": d < today})
+
+    enriched.sort(key=lambda e: e["date"])
+
+    return {
+        "ticker": ticker,
+        "count": len(enriched),
+        "events": enriched,
     }

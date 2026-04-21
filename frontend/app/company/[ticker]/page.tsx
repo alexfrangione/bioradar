@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { getCompany, type Company } from "@/lib/api";
+import Pipeline from "@/components/Pipeline";
+import StockChart from "@/components/StockChart";
 
 // Next.js 14 dynamic route — `params.ticker` from the URL.
 type Params = { ticker: string };
@@ -96,21 +98,9 @@ function CompanyHeader({ company }: { company: Company }) {
         </p>
       )}
 
-      <div className="p-8">
-        <div className="rounded-xl border border-border-subtle bg-bg-elev p-8 text-center">
-          <div className="text-xs font-semibold tracking-widest uppercase text-accent-blue mb-3">
-            Coming next
-          </div>
-          <h2 className="text-xl font-semibold mb-2">
-            Pipeline, catalyst calendar, and rNPV workbench
-          </h2>
-          <p className="text-text-dim max-w-xl mx-auto text-sm">
-            The header strip above is wired to real API data. In the next
-            iteration we&apos;ll add the pipeline table, catalyst calendar,
-            financial charts, and interactive valuation model you saw in the
-            mockups.
-          </p>
-        </div>
+      <div className="p-8 space-y-6">
+        <StockChart ticker={company.ticker} />
+        <Pipeline ticker={company.ticker} />
       </div>
     </>
   );
