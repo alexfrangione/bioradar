@@ -28,6 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from edgar import get_edgar_catalysts, get_edgar_company_data, get_edgar_earnings
 from finnhub import get_finnhub_catalysts
+from sector_filter import is_healthcare_ticker
 
 # Always load .env from next to main.py — not from the process CWD.
 # This way the key is found whether you run uvicorn from backend/ or the repo root.
@@ -906,7 +907,6 @@ async def search_tickers(q: str, limit: int = 8) -> dict:
 
     raw = data.get("data", []) if isinstance(data, dict) else []
     seen: set[str] = set()
-    out: list[dict] = []
     # Prefer US-listed common stocks; push others to the end
     primary: list[dict] = []
     secondary: list[dict] = []
@@ -931,8 +931,33 @@ async def search_tickers(q: str, limit: int = 8) -> dict:
             primary.append(hit)
         else:
             secondary.append(hit)
-    out = (primary + secondary)[:limit]
-    return {"query": q, "results": out}
+
+    # Healthcare-sector filter — BioRadar only surfaces biotech / pharma /
+    # life-science / medical-device / diagnostics / healthcare-services
+    # tickers in search. Classify each candidate in parallel so the overall
+    # request stays fast.
+    ordered = primary + secondary
+    if not ordered:
+        return {"query": q, "results": []}
+
+    seed_set = set(SEED_COMPANIES.keys())
+    checks = await asyncio.gather(
+        *[
+            is_healthcare_ticker(
+                hit["symbol"],
+                seed_tickers=seed_set,
+                edgar_lookup=get_edgar_company_data,
+            )
+            for hit in ordered
+        ],
+        return_exceptions=True,
+    )
+    filtered = [
+        hit
+        for hit, ok in zip(ordered, checks)
+        if ok is True  # treat exceptions / False as "hide"
+    ]
+    return {"query": q, "results": filtered[:limit]}
 
 
 # ---------------------------------------------------------------------------
