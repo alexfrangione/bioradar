@@ -512,10 +512,21 @@ def _fetch_yfinance(ticker: str, period: str) -> list[dict]:
     return points
 
 
-async def _fetch_stooq(ticker: str, period: str) -> list[dict]:
+_BROWSER_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/122.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/csv,text/plain,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
+
+async def _fetch_stooq(ticker: str, period: str) -> tuple[list[dict], str | None]:
     """
-    Fallback source — Stooq publishes free daily CSV with no API key and no
-    cloud-IP blocking. Format: Date,Open,High,Low,Close,Volume.
+    Fallback source — Stooq publishes free daily CSV with no API key.
+    Returns (points, error_detail). error_detail is None on success.
     """
     days = _PERIOD_DAYS.get(period, 732)
     end = datetime.utcnow().date()
@@ -526,22 +537,31 @@ async def _fetch_stooq(ticker: str, period: str) -> list[dict]:
     )
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with httpx.AsyncClient(
+            timeout=20.0, headers=_BROWSER_HEADERS, follow_redirects=True
+        ) as client:
             r = await client.get(url)
-    except httpx.HTTPError:
-        return []
+    except httpx.HTTPError as exc:
+        return [], f"stooq network error: {exc}"
 
-    if r.status_code != 200 or not r.text:
-        return []
+    if r.status_code != 200:
+        return [], f"stooq HTTP {r.status_code}"
+    if not r.text:
+        return [], "stooq empty response body"
 
     text = r.text.strip()
-    # Stooq returns "No data" (short body) when it doesn't know the ticker.
-    if "no data" in text[:100].lower():
-        return []
+    preview = text[:120].replace("\n", " ").replace("\r", " ")
+
+    if "no data" in text[:200].lower():
+        return [], f"stooq says no data (preview: {preview!r})"
 
     lines = text.split("\n")
     if len(lines) < 2:
-        return []
+        return [], f"stooq response too short (preview: {preview!r})"
+
+    # First line should be the header "Date,Open,High,Low,Close,Volume"
+    if not lines[0].lower().startswith("date"):
+        return [], f"stooq unexpected format (preview: {preview!r})"
 
     points: list[dict] = []
     for line in lines[1:]:
@@ -550,11 +570,8 @@ async def _fetch_stooq(ticker: str, period: str) -> list[dict]:
             continue
         try:
             date_str = parts[0]
-            # Accept either YYYY-MM-DD or YYYYMMDD
             if len(date_str) == 8 and date_str.isdigit():
-                date_str = (
-                    f"{date_str[0:4]}-{date_str[4:6]}-{date_str[6:8]}"
-                )
+                date_str = f"{date_str[0:4]}-{date_str[4:6]}-{date_str[6:8]}"
             close = float(parts[4])
         except (ValueError, IndexError):
             continue
@@ -566,7 +583,9 @@ async def _fetch_stooq(ticker: str, period: str) -> list[dict]:
             {"date": date_str, "close": round(close, 2), "volume": volume}
         )
 
-    return points
+    if not points:
+        return [], f"stooq parsed zero rows (preview: {preview!r})"
+    return points, None
 
 
 @app.get("/api/company/{ticker}/prices")
@@ -586,9 +605,10 @@ async def get_prices(ticker: str, period: str = "2y") -> dict:
 
     points = await asyncio.to_thread(_fetch_yfinance, ticker, period)
     source = "yfinance"
+    stooq_err: str | None = None
 
     if not points:
-        points = await _fetch_stooq(ticker, period)
+        points, stooq_err = await _fetch_stooq(ticker, period)
         source = "stooq"
 
     if not points:
@@ -597,10 +617,8 @@ async def get_prices(ticker: str, period: str = "2y") -> dict:
             "period": period,
             "count": 0,
             "points": [],
-            "error": (
-                "No data available from yfinance or Stooq. Yahoo may be "
-                "rate-limiting and the ticker may not be on Stooq."
-            ),
+            "error": stooq_err
+            or "No data available from yfinance or Stooq.",
         }
 
     return {
