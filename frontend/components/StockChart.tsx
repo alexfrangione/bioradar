@@ -64,7 +64,10 @@ export default function StockChart({ ticker }: Props) {
       getPrices(ticker, period),
       getCatalysts(ticker),
       getEarnings(ticker),
-      getPipeline(ticker),
+      // Chart surfaces derived events from trials (terminations, readouts,
+      // upcoming completions). Big-pharma tickers can have hundreds of
+      // trials, so request the max (100) for better coverage.
+      getPipeline(ticker, 100),
     ])
       .then(([p, c, e, pl]) => {
         if (cancelled) return;

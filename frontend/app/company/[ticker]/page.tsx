@@ -130,7 +130,9 @@ function CompanyHeader({
           value={
             company.runway_months
               ? `${company.runway_months} mo`
-              : "profitable"
+              : company.cash_usd != null
+                ? "profitable"
+                : "—"
           }
           sub={
             company.quarterly_burn_usd
@@ -146,7 +148,9 @@ function CompanyHeader({
           sub={
             company.eps_ttm != null
               ? `EPS $${company.eps_ttm.toFixed(2)}`
-              : "unprofitable"
+              : company.eps_ttm === null && company.pe_ratio === null
+                ? undefined
+                : "unprofitable"
           }
         />
         <Metric
@@ -182,7 +186,7 @@ function Placeholder({ company }: { company: Company }) {
   return (
     <div className="px-8 py-20 text-center">
       <div className="inline-block px-4 py-2 rounded-md bg-accent-amber/10 text-accent-amber text-xs font-semibold uppercase tracking-widest mb-5 border border-accent-amber/30">
-        No seed data
+        Ticker not found
       </div>
       <h1 className="text-3xl font-bold mb-3">
         <span className="font-mono">{company.ticker}</span>

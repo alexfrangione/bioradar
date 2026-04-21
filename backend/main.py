@@ -15,14 +15,18 @@ Endpoints:
 
 import asyncio
 import os
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
+from time import time as _now
 from typing import Any
 
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+
+from edgar import get_edgar_company_data, get_edgar_earnings
 
 # Always load .env from next to main.py — not from the process CWD.
 # This way the key is found whether you run uvicorn from backend/ or the repo root.
@@ -581,64 +585,6 @@ SEED_CATALYSTS: dict[str, list[dict]] = {
 }
 
 # ---------------------------------------------------------------------------
-# Seed data — earnings dates (roughly quarterly per company).
-# These show up on the chart as subtle tick marks distinct from catalysts.
-# ---------------------------------------------------------------------------
-SEED_EARNINGS: dict[str, list[dict]] = {
-    "CRSP": [
-        {"date": "2024-08-07", "period": "Q2 2024"},
-        {"date": "2024-11-07", "period": "Q3 2024"},
-        {"date": "2025-02-13", "period": "Q4 2024"},
-        {"date": "2025-05-06", "period": "Q1 2025"},
-        {"date": "2025-08-05", "period": "Q2 2025"},
-        {"date": "2025-11-06", "period": "Q3 2025"},
-        {"date": "2026-02-12", "period": "Q4 2025"},
-        {"date": "2026-05-07", "period": "Q1 2026"},
-    ],
-    "SRPT": [
-        {"date": "2024-08-07", "period": "Q2 2024"},
-        {"date": "2024-11-06", "period": "Q3 2024"},
-        {"date": "2025-02-26", "period": "Q4 2024"},
-        {"date": "2025-05-07", "period": "Q1 2025"},
-        {"date": "2025-08-06", "period": "Q2 2025"},
-        {"date": "2025-11-05", "period": "Q3 2025"},
-        {"date": "2026-02-25", "period": "Q4 2025"},
-        {"date": "2026-05-06", "period": "Q1 2026"},
-    ],
-    "BEAM": [
-        {"date": "2024-08-08", "period": "Q2 2024"},
-        {"date": "2024-11-07", "period": "Q3 2024"},
-        {"date": "2025-02-27", "period": "Q4 2024"},
-        {"date": "2025-05-08", "period": "Q1 2025"},
-        {"date": "2025-08-07", "period": "Q2 2025"},
-        {"date": "2025-11-06", "period": "Q3 2025"},
-        {"date": "2026-02-26", "period": "Q4 2025"},
-        {"date": "2026-05-07", "period": "Q1 2026"},
-    ],
-    "VRTX": [
-        {"date": "2024-08-01", "period": "Q2 2024"},
-        {"date": "2024-10-28", "period": "Q3 2024"},
-        {"date": "2025-02-03", "period": "Q4 2024"},
-        {"date": "2025-05-05", "period": "Q1 2025"},
-        {"date": "2025-08-04", "period": "Q2 2025"},
-        {"date": "2025-11-03", "period": "Q3 2025"},
-        {"date": "2026-02-02", "period": "Q4 2025"},
-        {"date": "2026-05-04", "period": "Q1 2026"},
-    ],
-    "MRNA": [
-        {"date": "2024-08-01", "period": "Q2 2024"},
-        {"date": "2024-11-07", "period": "Q3 2024"},
-        {"date": "2025-02-13", "period": "Q4 2024"},
-        {"date": "2025-05-02", "period": "Q1 2025"},
-        {"date": "2025-08-01", "period": "Q2 2025"},
-        {"date": "2025-11-05", "period": "Q3 2025"},
-        {"date": "2026-02-19", "period": "Q4 2025"},
-        {"date": "2026-05-08", "period": "Q1 2026"},
-    ],
-}
-
-
-# ---------------------------------------------------------------------------
 # ClinicalTrials.gov display helpers
 # ---------------------------------------------------------------------------
 _PHASE_DISPLAY = {
@@ -707,21 +653,285 @@ def list_companies() -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# Twelve Data fallback — lets us handle tickers beyond the SEED_COMPANIES set
+# ---------------------------------------------------------------------------
+_PROFILE_TTL_SECONDS = 3600  # 1 hour — Twelve Data free tier is rate-limited
+_profile_cache: dict[str, tuple[float, dict | None]] = {}
+
+
+async def _fetch_twelvedata_profile(ticker: str) -> dict | None:
+    """Fetch sector, industry, description, HQ from Twelve Data /profile."""
+    api_key = os.getenv("TWELVE_DATA_API_KEY")
+    if not api_key:
+        return None
+
+    cached = _profile_cache.get(ticker)
+    if cached and (_now() - cached[0]) < _PROFILE_TTL_SECONDS:
+        return cached[1]
+
+    try:
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            r = await client.get(
+                "https://api.twelvedata.com/profile",
+                params={"symbol": ticker, "apikey": api_key},
+            )
+        if r.status_code != 200:
+            _profile_cache[ticker] = (_now(), None)
+            return None
+        data = r.json()
+        if isinstance(data, dict) and data.get("status") == "error":
+            _profile_cache[ticker] = (_now(), None)
+            return None
+        _profile_cache[ticker] = (_now(), data)
+        return data
+    except httpx.HTTPError:
+        return None
+
+
+async def _fetch_twelvedata_quote_basic(ticker: str) -> dict | None:
+    """Fetch just the /quote payload — works on free tier.
+
+    Returned shape is the raw Twelve Data JSON (has `name`, `exchange`,
+    `fifty_two_week`, etc). Used as a fallback when /profile is gated.
+    """
+    api_key = os.getenv("TWELVE_DATA_API_KEY")
+    if not api_key:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(
+                "https://api.twelvedata.com/quote",
+                params={"symbol": ticker, "apikey": api_key},
+            )
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        if isinstance(data, dict) and data.get("status") == "error":
+            return None
+        return data
+    except httpx.HTTPError:
+        return None
+
+
+async def _fetch_twelvedata_statistics(ticker: str) -> dict | None:
+    """Fetch market cap, P/E, EPS, shares from Twelve Data /statistics.
+
+    This endpoint is sometimes gated by plan tier; we gracefully return None
+    on any error so the caller can just show "—" in those cells.
+    """
+    api_key = os.getenv("TWELVE_DATA_API_KEY")
+    if not api_key:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            r = await client.get(
+                "https://api.twelvedata.com/statistics",
+                params={"symbol": ticker, "apikey": api_key},
+            )
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        if isinstance(data, dict) and data.get("status") == "error":
+            return None
+        return data
+    except httpx.HTTPError:
+        return None
+
+
+def _format_hq(profile: dict | None) -> str | None:
+    """Build a short HQ string: 'Cambridge, MA' or 'Zug, Switzerland'."""
+    if not isinstance(profile, dict):
+        return None
+    city = (profile.get("city") or "").strip()
+    state = (profile.get("state") or "").strip()
+    country = (profile.get("country") or "").strip()
+    parts: list[str] = []
+    if city:
+        parts.append(city)
+    if state:
+        parts.append(state)
+    elif country and country.lower() != "united states":
+        parts.append(country)
+    return ", ".join(parts) if parts else None
+
+
+# Regex of common corporate suffixes to strip for ClinicalTrials.gov queries.
+# Matches ", Inc.", " Inc", ", Corporation", " Holdings", " AG", etc.
+_SUFFIX_RE = re.compile(
+    r"[,]?\s+(Inc\.?|Incorporated|Corporation|Corp\.?|Co\.?|Company|"
+    r"Limited|Ltd\.?|Holdings|Group|LLC|L\.L\.C\.|AG|S\.A\.|SA|NV|"
+    r"plc|PLC|N\.V\.)\s*$",
+    re.IGNORECASE,
+)
+
+
+def _clean_sponsor_name(name: str) -> str:
+    """Strip common corporate suffixes so ClinicalTrials.gov sponsor search matches."""
+    if not name:
+        return name
+    cleaned = name.strip()
+    # Strip suffixes up to 2 times ("Foo Holdings, Inc." → "Foo")
+    for _ in range(2):
+        new = _SUFFIX_RE.sub("", cleaned).strip().rstrip(",")
+        if new == cleaned:
+            break
+        cleaned = new
+    return cleaned
+
+
 @app.get("/api/company/{ticker}")
-def get_company(ticker: str) -> dict:
+async def get_company(ticker: str) -> dict:
     ticker = ticker.upper().strip()
     company = SEED_COMPANIES.get(ticker)
-    if company is None:
+    if company is not None:
+        return company
+
+    # Unknown ticker — fallback chain:
+    #   1. Grab the live price from Twelve Data /quote (free tier) for
+    #      market-cap math and to salvage name/exchange if EDGAR misses.
+    #   2. SEC EDGAR — authoritative + free. Fills cash, burn, runway, EPS,
+    #      shares outstanding, P/E, sector, HQ, etc. US-listed filers only.
+    #   3. Twelve Data /profile — richer descriptions (gated on paid tiers,
+    #      gracefully None on free).
+    #   4. Twelve Data /quote — at least gives us name + exchange for non-US
+    #      ADRs that aren't in EDGAR.
+    quote_basic, edgar_data = await asyncio.gather(
+        _fetch_twelvedata_quote_basic(ticker),
+        # We'll set price inside get_edgar_company_data via a second call
+        # below if quote_basic has one — but it's cheaper to just run it
+        # without the price and update market cap / P/E afterwards since
+        # EDGAR returns shares_outstanding + eps_ttm directly.
+        get_edgar_company_data(ticker),
+    )
+
+    # Re-compute market cap and P/E now that we have the price.
+    price = _to_float(quote_basic.get("close")) if isinstance(quote_basic, dict) else None
+    if edgar_data and price is not None:
+        shares = edgar_data.get("shares_outstanding")
+        if shares and edgar_data.get("market_cap_usd") is None:
+            edgar_data["market_cap_usd"] = float(price) * float(shares)
+        eps = edgar_data.get("eps_ttm")
+        if eps and eps > 0 and edgar_data.get("pe_ratio") is None:
+            edgar_data["pe_ratio"] = float(price) / float(eps)
+
+    # Only hit the paid-tier profile endpoint if EDGAR didn't yield anything —
+    # no point spending an API call when EDGAR already filled in sector/HQ.
+    profile: dict | None = None
+    if not edgar_data:
+        profile = await _fetch_twelvedata_profile(ticker)
+
+    if not edgar_data and not profile and not quote_basic:
         return {
             "ticker": ticker,
             "name": None,
             "placeholder": True,
             "message": (
-                "Live data coming soon. Try CRSP, SRPT, BEAM, VRTX, or MRNA "
-                "for seed data."
+                f"Couldn't find {ticker}. Check that it's a valid US-listed "
+                "ticker. (Seeded data is available for CRSP, SRPT, BEAM, "
+                "VRTX, and MRNA.)"
             ),
         }
-    return company
+
+    # Build the response by layering sources: EDGAR → Twelve Data /profile →
+    # /quote. Each layer only fills in what the previous one left null.
+    edgar_data = edgar_data or {}
+    profile = profile or {}
+    quote_basic = quote_basic or {}
+
+    def first(*values):
+        """Return the first non-None, non-empty value."""
+        for v in values:
+            if v is not None and v != "":
+                return v
+        return None
+
+    # If EDGAR doesn't have the common name (rare), try profile/quote.
+    name = first(edgar_data.get("name"), profile.get("name"), quote_basic.get("name"))
+    exchange = first(
+        edgar_data.get("exchange"),
+        profile.get("exchange"),
+        quote_basic.get("exchange"),
+    )
+    hq = first(edgar_data.get("hq"), _format_hq(profile))
+    sector = first(edgar_data.get("sector"), profile.get("sector"))
+    industry = first(edgar_data.get("industry"), profile.get("industry"))
+    description = first(edgar_data.get("description"), profile.get("description"))
+
+    return {
+        "ticker": ticker,
+        "name": name,
+        "exchange": exchange,
+        "hq": hq,
+        "sector": sector,
+        "industry": industry,
+        "description": description,
+        "market_cap_usd": edgar_data.get("market_cap_usd"),
+        "cash_usd": edgar_data.get("cash_usd"),
+        "quarterly_burn_usd": edgar_data.get("quarterly_burn_usd"),
+        "runway_months": edgar_data.get("runway_months"),
+        "shares_outstanding": edgar_data.get("shares_outstanding"),
+        "eps_ttm": edgar_data.get("eps_ttm"),
+        "pe_ratio": edgar_data.get("pe_ratio"),
+        "health": None,
+        "placeholder": False,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Ticker search / autocomplete — Twelve Data /symbol_search
+# ---------------------------------------------------------------------------
+@app.get("/api/search")
+async def search_tickers(q: str, limit: int = 8) -> dict:
+    q = q.strip()
+    if not q:
+        return {"query": q, "results": []}
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(
+                "https://api.twelvedata.com/symbol_search",
+                params={"symbol": q, "outputsize": min(max(limit * 3, 1), 30)},
+            )
+        if r.status_code != 200:
+            return {
+                "query": q,
+                "results": [],
+                "error": f"twelvedata HTTP {r.status_code}",
+            }
+        data = r.json()
+    except httpx.HTTPError as exc:
+        return {"query": q, "results": [], "error": str(exc)}
+
+    raw = data.get("data", []) if isinstance(data, dict) else []
+    seen: set[str] = set()
+    out: list[dict] = []
+    # Prefer US-listed common stocks; push others to the end
+    primary: list[dict] = []
+    secondary: list[dict] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        symbol = (item.get("symbol") or "").strip()
+        name = (item.get("instrument_name") or "").strip()
+        if not symbol or symbol in seen:
+            continue
+        seen.add(symbol)
+        hit = {
+            "symbol": symbol,
+            "name": name,
+            "exchange": item.get("exchange"),
+            "country": item.get("country"),
+            "type": item.get("instrument_type"),
+        }
+        country = (item.get("country") or "").lower()
+        itype = (item.get("instrument_type") or "").lower()
+        if country in {"united states", "us"} and "stock" in itype:
+            primary.append(hit)
+        else:
+            secondary.append(hit)
+    out = (primary + secondary)[:limit]
+    return {"query": q, "results": out}
 
 
 # ---------------------------------------------------------------------------
@@ -731,11 +941,38 @@ def get_company(ticker: str) -> dict:
 async def get_pipeline(ticker: str, limit: int = 25) -> dict:
     ticker = ticker.upper().strip()
     sponsor = TICKER_TO_SPONSOR.get(ticker)
+
+    # For unseeded tickers, derive the sponsor name. Try SEC EDGAR first
+    # (authoritative + already cached from the /company call), then Twelve
+    # Data. ClinicalTrials.gov does fuzzy matching, so stripping "Inc.",
+    # "Corp.", etc. usually gives a good enough query.
     if not sponsor:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No sponsor mapping for ticker {ticker!r}.",
-        )
+        name: str | None = None
+        edgar_data = await get_edgar_company_data(ticker)
+        if isinstance(edgar_data, dict):
+            name = edgar_data.get("name")
+        if not name:
+            profile = await _fetch_twelvedata_profile(ticker)
+            if isinstance(profile, dict):
+                name = profile.get("name")
+        if not name:
+            quote_basic = await _fetch_twelvedata_quote_basic(ticker)
+            if isinstance(quote_basic, dict):
+                name = quote_basic.get("name")
+        if name:
+            sponsor = _clean_sponsor_name(name)
+
+    if not sponsor:
+        return {
+            "ticker": ticker,
+            "sponsor": None,
+            "count": 0,
+            "trials": [],
+            "error": (
+                f"Couldn't resolve a company name for {ticker} — pipeline "
+                "lookup needs a sponsor name."
+            ),
+        }
 
     url = "https://clinicaltrials.gov/api/v2/studies"
     params = {
@@ -1123,19 +1360,13 @@ def get_catalysts(ticker: str) -> dict:
 # Earnings
 # ---------------------------------------------------------------------------
 @app.get("/api/company/{ticker}/earnings")
-def get_earnings(ticker: str) -> dict:
+async def get_earnings(ticker: str) -> dict:
     ticker = ticker.upper().strip()
-    items = SEED_EARNINGS.get(ticker, [])
-
     today = datetime.utcnow().date()
-    enriched = []
-    for e in items:
-        try:
-            d = datetime.strptime(e["date"], "%Y-%m-%d").date()
-        except ValueError:
-            continue
-        enriched.append({**e, "past": d < today})
 
+    # SEC EDGAR 8-K Item 2.02 (US filers) + 6-K (foreign private issuers like
+    # CRSP) — the actual earnings press release, same-day accurate.
+    enriched = await get_edgar_earnings(ticker)
     enriched.sort(key=lambda e: e["date"])
 
     return {

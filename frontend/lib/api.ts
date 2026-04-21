@@ -48,9 +48,24 @@ export type Trial = {
 
 export type PipelineResponse = {
   ticker: string;
-  sponsor: string;
+  sponsor: string | null;
   count: number;
   trials: Trial[];
+  error?: string;
+};
+
+export type SearchHit = {
+  symbol: string;
+  name: string;
+  exchange?: string | null;
+  country?: string | null;
+  type?: string | null;
+};
+
+export type SearchResponse = {
+  query: string;
+  results: SearchHit[];
+  error?: string;
 };
 
 export type PricePoint = {
@@ -147,9 +162,9 @@ export function getCompany(ticker: string) {
   return getJSON<Company>(`/api/company/${encodeURIComponent(ticker)}`);
 }
 
-export function getPipeline(ticker: string) {
+export function getPipeline(ticker: string, limit: number = 25) {
   return getJSON<PipelineResponse>(
-    `/api/company/${encodeURIComponent(ticker)}/pipeline`,
+    `/api/company/${encodeURIComponent(ticker)}/pipeline?limit=${limit}`,
   );
 }
 
@@ -175,6 +190,12 @@ export function getEarnings(ticker: string) {
 
 export function getQuote(ticker: string) {
   return getJSON<Quote>(`/api/company/${encodeURIComponent(ticker)}/quote`);
+}
+
+export function searchTickers(q: string, limit: number = 8) {
+  return getJSON<SearchResponse>(
+    `/api/search?q=${encodeURIComponent(q)}&limit=${limit}`,
+  );
 }
 
 export { API_URL };
