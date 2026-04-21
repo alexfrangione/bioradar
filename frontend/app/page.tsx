@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { searchTickers, type SearchHit } from "@/lib/api";
@@ -103,9 +104,12 @@ export default function LandingPage() {
           <a className="text-text-dim hover:text-text text-[13px] cursor-pointer">
             Methodology
           </a>
-          <a className="text-text-dim hover:text-text text-[13px] cursor-pointer">
+          <Link
+            href="/watchlist"
+            className="text-text-dim hover:text-text text-[13px] cursor-pointer"
+          >
             Watchlist
-          </a>
+          </Link>
           <button className="px-3.5 py-1.5 text-[13px] font-medium bg-bg-elev border border-border rounded-md hover:bg-bg-elev2">
             Log in
           </button>

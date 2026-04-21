@@ -16,7 +16,7 @@ Endpoints:
 import asyncio
 import os
 import re
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from time import time as _now
 from typing import Any
@@ -1050,12 +1050,199 @@ async def get_pipeline(ticker: str, limit: int = 25) -> dict:
         )
     )
 
+    drugs = _aggregate_trials_by_drug(trials)
+
     return {
         "ticker": ticker,
         "sponsor": sponsor,
         "count": len(trials),
+        "drug_count": len(drugs),
+        "drugs": drugs,
+        # Keep raw trials for the chart's derived-events overlay.
         "trials": trials,
     }
+
+
+# Priority used for the rollup status pill: if *any* trial in a group is in a
+# given state, surface that state (preferring more-active states). Answers
+# "where is this drug now?" rather than "what did the last trial do?" — so a
+# program with one Terminated Ph3 and four active lower-phase trials still
+# reads as Recruiting, with the stopped trial visible in the expand panel.
+_STATUS_PRIORITY: tuple[str, ...] = (
+    "RECRUITING",
+    "ACTIVE_NOT_RECRUITING",
+    "NOT_YET_RECRUITING",
+    "COMPLETED",
+    "TERMINATED",
+    "SUSPENDED",
+    "WITHDRAWN",
+)
+_STATUS_LABEL: dict[str, str] = {
+    "RECRUITING": "Recruiting",
+    "ACTIVE_NOT_RECRUITING": "Active, not recruiting",
+    "NOT_YET_RECRUITING": "Not yet recruiting",
+    "COMPLETED": "Completed",
+    "TERMINATED": "Terminated",
+    "SUSPENDED": "Suspended",
+    "WITHDRAWN": "Withdrawn",
+}
+
+
+def _status_bucket(raw: str | None) -> str:
+    """Map a ClinicalTrials.gov status onto a coarse UI bucket used by the
+    stacked bar (active / planned / done / stopped / other)."""
+    if raw in ("RECRUITING", "ACTIVE_NOT_RECRUITING"):
+        return "active"
+    if raw == "NOT_YET_RECRUITING":
+        return "planned"
+    if raw == "COMPLETED":
+        return "completed"
+    if raw in ("TERMINATED", "SUSPENDED", "WITHDRAWN"):
+        return "stopped"
+    return "other"
+
+
+def _aggregate_trials_by_drug(trials: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Collapse multiple trials of the same drug into a single pipeline row.
+
+    Grouping key: lowercased+stripped drug name (so "CTX-001" and "ctx-001"
+    merge, but "CTX-001" and "CTX-001 (KT-001)" stay separate — safer than
+    over-normalizing).
+
+    Trials with no drug listed are kept as their own row, keyed by nct_id so
+    they don't all collapse into a single "Unnamed" bucket.
+
+    For each group we surface:
+      - drug:               canonical display name (shortest non-empty variant)
+      - highest_phase:      the furthest-advanced phase any trial has reached
+      - highest_phase_rank: numeric rank for sorting/coloring
+      - indications:        deduped list of all indications across trials
+      - trial_count:        how many trials in the group
+      - latest_status:      activity-priority rollup — "what is this drug
+                            doing right now", NOT "what did the last trial do"
+      - status_counts:      {active,planned,completed,stopped,other} — used
+                            by the frontend to render the expand-panel bar
+      - nct_ids / trials:   drill-down data for the row's expand panel
+    """
+    groups: dict[str, list[dict[str, Any]]] = {}
+    order: list[str] = []
+
+    for t in trials:
+        drug = (t.get("drug") or "").strip()
+        if drug:
+            key = drug.lower()
+        else:
+            # Unnamed drug — give it a unique key so it stays its own row.
+            key = f"__nct__:{t.get('nct_id') or id(t)}"
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(t)
+
+    aggregated: list[dict[str, Any]] = []
+    for key in order:
+        group = groups[key]
+
+        # Display name — pick the shortest non-empty name (usually the
+        # cleanest "BEAM-101" over "BEAM-101 (CTX-001 analog)").
+        names = [t.get("drug") for t in group if t.get("drug")]
+        display = min(names, key=len) if names else None
+
+        # Highest phase across the group.
+        top = max(group, key=lambda t: t.get("phase_rank", 0))
+
+        # Activity-priority status rollup. Walk the priority list and return
+        # the first status any trial in the group currently has.
+        raws_in_group = {t.get("status_raw") for t in group if t.get("status_raw")}
+        status_raw: str | None = None
+        for candidate in _STATUS_PRIORITY:
+            if candidate in raws_in_group:
+                status_raw = candidate
+                break
+        if status_raw is None:
+            # Fallback — whatever the most-advanced trial reports.
+            status_raw = top.get("status_raw")
+        status_label = _STATUS_LABEL.get(status_raw or "", top.get("status") or "Unknown")
+
+        # Bucketed counts for the stacked bar in the drilldown panel.
+        status_counts = {
+            "active": 0,
+            "planned": 0,
+            "completed": 0,
+            "stopped": 0,
+            "other": 0,
+        }
+        for t in group:
+            status_counts[_status_bucket(t.get("status_raw"))] += 1
+
+        # Dedupe indications, preserving first-seen order.
+        seen_ind: set[str] = set()
+        indications: list[str] = []
+        for t in group:
+            for c in t.get("conditions") or []:
+                if c and c not in seen_ind:
+                    seen_ind.add(c)
+                    indications.append(c)
+
+        # Next meaningful completion date. We want the investor-facing answer
+        # to "when's the next catalyst for this drug?" — so:
+        #   1. If any trial has an upcoming primary completion, pick the
+        #      soonest one (the next real readout window).
+        #   2. Otherwise (all trials are done) fall back to the MOST RECENT
+        #      past completion so the row surfaces the latest readout rather
+        #      than the oldest one.
+        today_iso = date.today().isoformat()
+        dates = [
+            t.get("primary_completion_date")
+            for t in group
+            if t.get("primary_completion_date")
+        ]
+        future_dates = [d for d in dates if d >= today_iso]
+        if future_dates:
+            next_completion = min(future_dates)
+        elif dates:
+            next_completion = max(dates)
+        else:
+            next_completion = None
+
+        aggregated.append(
+            {
+                "drug": display,
+                "highest_phase": top.get("phase", "N/A"),
+                "highest_phase_rank": top.get("phase_rank", 0),
+                "indications": indications,
+                "indication": indications[0] if indications else None,
+                "trial_count": len(group),
+                "latest_status": status_label,
+                "latest_status_raw": status_raw,
+                "status_counts": status_counts,
+                "next_completion_date": next_completion,
+                "nct_ids": [t.get("nct_id") for t in group if t.get("nct_id")],
+                "trials": [
+                    {
+                        "nct_id": t.get("nct_id"),
+                        "title": t.get("title"),
+                        "phase": t.get("phase"),
+                        "phase_rank": t.get("phase_rank"),
+                        "status": t.get("status"),
+                        "status_raw": t.get("status_raw"),
+                        "indication": t.get("indication"),
+                        "primary_completion_date": t.get("primary_completion_date"),
+                        "url": t.get("url"),
+                    }
+                    for t in group
+                ],
+            }
+        )
+
+    aggregated.sort(
+        key=lambda d: (
+            -d["highest_phase_rank"],
+            d.get("next_completion_date") or "9999-99-99",
+        )
+    )
+    return aggregated
 
 
 # ---------------------------------------------------------------------------

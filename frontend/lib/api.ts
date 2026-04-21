@@ -46,10 +46,47 @@ export type Trial = {
   url: string | null;
 };
 
+export type DrugTrialRef = {
+  nct_id: string | null;
+  title: string | null;
+  phase: string;
+  phase_rank: number;
+  status: string;
+  status_raw: string | null;
+  indication: string | null;
+  primary_completion_date: string | null;
+  url: string | null;
+};
+
+export type StatusCounts = {
+  active: number;
+  planned: number;
+  completed: number;
+  stopped: number;
+  other: number;
+};
+
+export type Drug = {
+  drug: string | null;
+  highest_phase: string;
+  highest_phase_rank: number;
+  indications: string[];
+  indication: string | null;
+  trial_count: number;
+  latest_status: string;
+  latest_status_raw: string | null;
+  status_counts: StatusCounts;
+  next_completion_date: string | null;
+  nct_ids: string[];
+  trials: DrugTrialRef[];
+};
+
 export type PipelineResponse = {
   ticker: string;
   sponsor: string | null;
-  count: number;
+  count: number; // raw trial count
+  drug_count?: number;
+  drugs?: Drug[];
   trials: Trial[];
   error?: string;
 };
