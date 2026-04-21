@@ -21,7 +21,7 @@ export default function SiteNav() {
   const pathname = usePathname() ?? "";
 
   return (
-    <nav className="flex items-center justify-between px-8 py-4 border-b border-border-subtle">
+    <nav className="flex items-center justify-between px-8 py-4 bg-bg-elev border-b border-border-subtle">
       <Link href="/" className="inline-flex">
         <Brand size="nav" />
       </Link>

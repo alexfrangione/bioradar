@@ -1046,11 +1046,20 @@ async def search_tickers(q: str, limit: int = 8) -> dict:
     # skip the EDGAR classify. That collapses the common case — users typing
     # a familiar ticker — to a zero-network-hop filter.
     known_healthcare = set(SEED_COMPANIES.keys()) | _POPULAR_HEALTHCARE
+    known_hits = [hit for hit in ordered if hit["symbol"] in known_healthcare]
 
-    to_classify = [hit for hit in ordered if hit["symbol"] not in known_healthcare]
-    # Early-exit once we've filled the limit so we never pay for more
-    # classifications than we can actually surface.
-    # (Twelve Data sorts by relevance, so the leading results are what we want.)
+    # If the known-healthcare set alone already satisfies the limit, return
+    # immediately. No EDGAR round-trips on the hot path — autocomplete feels
+    # instant for the 95% case (typing a familiar biotech ticker).
+    if len(known_hits) >= limit:
+        return {"query": q, "results": known_hits[:limit]}
+
+    # Otherwise classify the unknowns, but only as many as we still need to
+    # fill the limit — classifying extras just burns latency we won't surface.
+    unknowns = [hit for hit in ordered if hit["symbol"] not in known_healthcare]
+    needed = limit - len(known_hits)
+    to_classify = unknowns[: max(needed * 2, needed + 2)]
+
     checks = await asyncio.gather(
         *[
             is_healthcare_ticker(
