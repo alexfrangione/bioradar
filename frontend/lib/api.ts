@@ -1,8 +1,5 @@
 /**
  * Thin API client for the BioRadar backend.
- *
- * The base URL comes from NEXT_PUBLIC_API_URL so the same code works in
- * local dev and in production.
  */
 
 const API_URL =
@@ -16,11 +13,16 @@ export type Company = {
   name: string | null;
   exchange?: string;
   hq?: string;
+  sector?: string;
+  industry?: string;
   description?: string;
   market_cap_usd?: number;
   cash_usd?: number;
   quarterly_burn_usd?: number;
   runway_months?: number | null;
+  shares_outstanding?: number;
+  eps_ttm?: number | null;
+  pe_ratio?: number | null;
   health?: "strong" | "stable" | "watch" | "risk";
   placeholder?: boolean;
   message?: string;
@@ -39,6 +41,8 @@ export type Trial = {
   status: string;
   status_raw: string | null;
   primary_completion_date: string | null;
+  last_update_date?: string | null;
+  why_stopped?: string | null;
   url: string | null;
 };
 
@@ -50,7 +54,7 @@ export type PipelineResponse = {
 };
 
 export type PricePoint = {
-  date: string; // YYYY-MM-DD
+  date: string;
   close: number;
   volume: number;
 };
@@ -58,18 +62,31 @@ export type PricePoint = {
 export type PricesResponse = {
   ticker: string;
   period: string;
+  source?: string;
   count: number;
   points: PricePoint[];
+  error?: string;
 };
 
-export type CatalystType = "approval" | "readout" | "launch" | "filing" | "other";
+export type CatalystType =
+  | "approval"
+  | "readout-positive"
+  | "readout-negative"
+  | "failure"
+  | "fda-advisory"
+  | "launch"
+  | "filing"
+  | "licensing"
+  | "readout" // legacy
+  | "other";
 
 export type CatalystEvent = {
-  date: string; // YYYY-MM-DD
+  date: string;
   title: string;
   type: CatalystType;
   impact: "high" | "medium" | "low";
   past: boolean;
+  summary?: string;
 };
 
 export type CatalystsResponse = {
@@ -78,72 +95,86 @@ export type CatalystsResponse = {
   events: CatalystEvent[];
 };
 
+export type EarningsEvent = {
+  date: string;
+  period: string; // "Q3 2024"
+  past: boolean;
+};
+
+export type EarningsResponse = {
+  ticker: string;
+  count: number;
+  events: EarningsEvent[];
+};
+
+export type Quote = {
+  ticker: string;
+  name?: string | null;
+  exchange?: string | null;
+  currency?: string;
+  datetime?: string | null;
+  is_market_open?: boolean;
+  price: number | null;
+  previous_close: number | null;
+  change: number | null;
+  percent_change: number | null;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  volume: number | null;
+  average_volume: number | null;
+  fifty_two_week_low: number | null;
+  fifty_two_week_high: number | null;
+  fifty_two_week_range: string | null;
+  error?: string;
+};
+
 // ---------------------------------------------------------------------------
 // Fetchers
 // ---------------------------------------------------------------------------
-export async function getCompany(ticker: string): Promise<Company | null> {
+async function getJSON<T>(path: string): Promise<T | null> {
   try {
-    const res = await fetch(
-      `${API_URL}/api/company/${encodeURIComponent(ticker)}`,
-      { cache: "no-store" },
-    );
+    const res = await fetch(`${API_URL}${path}`, { cache: "no-store" });
     if (!res.ok) return null;
-    return (await res.json()) as Company;
+    return (await res.json()) as T;
   } catch (err) {
-    console.error("getCompany failed:", err);
+    console.error(`GET ${path} failed:`, err);
     return null;
   }
 }
 
-export async function getPipeline(
-  ticker: string,
-): Promise<PipelineResponse | null> {
-  try {
-    const res = await fetch(
-      `${API_URL}/api/company/${encodeURIComponent(ticker)}/pipeline`,
-      { cache: "no-store" },
-    );
-    if (!res.ok) return null;
-    return (await res.json()) as PipelineResponse;
-  } catch (err) {
-    console.error("getPipeline failed:", err);
-    return null;
-  }
+export function getCompany(ticker: string) {
+  return getJSON<Company>(`/api/company/${encodeURIComponent(ticker)}`);
 }
 
-export async function getPrices(
-  ticker: string,
-  period: string = "2y",
-): Promise<PricesResponse | null> {
-  try {
-    const res = await fetch(
-      `${API_URL}/api/company/${encodeURIComponent(
-        ticker,
-      )}/prices?period=${encodeURIComponent(period)}`,
-      { cache: "no-store" },
-    );
-    if (!res.ok) return null;
-    return (await res.json()) as PricesResponse;
-  } catch (err) {
-    console.error("getPrices failed:", err);
-    return null;
-  }
+export function getPipeline(ticker: string) {
+  return getJSON<PipelineResponse>(
+    `/api/company/${encodeURIComponent(ticker)}/pipeline`,
+  );
 }
 
-export async function getCatalysts(
-  ticker: string,
-): Promise<CatalystsResponse | null> {
-  try {
-    const res = await fetch(
-      `${API_URL}/api/company/${encodeURIComponent(ticker)}/catalysts`,
-      { cache: "no-store" },
-    );
-    if (!res.ok) return null;
-    return (await res.json()) as CatalystsResponse;
-  } catch (err) {
-    console.error("getCatalysts failed:", err);
-    return null;
-  }
+export function getPrices(ticker: string, period: string = "2y") {
+  return getJSON<PricesResponse>(
+    `/api/company/${encodeURIComponent(ticker)}/prices?period=${encodeURIComponent(
+      period,
+    )}`,
+  );
+}
+
+export function getCatalysts(ticker: string) {
+  return getJSON<CatalystsResponse>(
+    `/api/company/${encodeURIComponent(ticker)}/catalysts`,
+  );
+}
+
+export function getEarnings(ticker: string) {
+  return getJSON<EarningsResponse>(
+    `/api/company/${encodeURIComponent(ticker)}/earnings`,
+  );
+}
+
+export function getQuote(ticker: string) {
+  return getJSON<Quote>(`/api/company/${encodeURIComponent(ticker)}/quote`);
 }
 
 export { API_URL };

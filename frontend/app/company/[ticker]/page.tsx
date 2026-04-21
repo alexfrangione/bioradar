@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getCompany, type Company } from "@/lib/api";
+import { getCompany, getQuote, type Company, type Quote } from "@/lib/api";
 import Pipeline from "@/components/Pipeline";
 import StockChart from "@/components/StockChart";
 
@@ -8,7 +8,12 @@ type Params = { ticker: string };
 
 export default async function CompanyPage({ params }: { params: Params }) {
   const ticker = params.ticker.toUpperCase();
-  const company = await getCompany(ticker);
+  // Fetch company + quote in parallel. Quote can be null if Twelve Data
+  // errors or is rate-limited; header falls back gracefully.
+  const [company, quote] = await Promise.all([
+    getCompany(ticker),
+    getQuote(ticker),
+  ]);
 
   return (
     <main className="min-h-screen">
@@ -40,17 +45,30 @@ export default async function CompanyPage({ params }: { params: Params }) {
       {company?.placeholder && <Placeholder company={company} />}
 
       {/* Real company data */}
-      {company && !company.placeholder && <CompanyHeader company={company} />}
+      {company && !company.placeholder && (
+        <CompanyHeader company={company} quote={quote} />
+      )}
     </main>
   );
 }
 
 /* ---------- sub-components ---------- */
 
-function CompanyHeader({ company }: { company: Company }) {
+function CompanyHeader({
+  company,
+  quote,
+}: {
+  company: Company;
+  quote: Quote | null;
+}) {
+  const hasPrice = quote && !quote.error && quote.price != null;
+  const changeDir =
+    quote?.change == null ? 0 : quote.change > 0 ? 1 : quote.change < 0 ? -1 : 0;
+
   return (
     <>
-      <div className="px-8 py-5 border-b border-border-subtle flex items-center justify-between gap-5">
+      {/* Identity row */}
+      <div className="px-8 py-5 border-b border-border-subtle flex items-center justify-between gap-5 flex-wrap">
         <div className="flex items-center gap-3.5">
           <div className="w-11 h-11 rounded-lg bg-gradient-to-br from-[#2d4a7c] to-[#1f3356] flex items-center justify-center font-bold text-[#c5d7f2] text-sm">
             {company.ticker}
@@ -62,34 +80,88 @@ function CompanyHeader({ company }: { company: Company }) {
             <div className="text-xs text-text-dim font-mono mt-0.5">
               {company.exchange}: {company.ticker}
               {company.hq ? ` · ${company.hq}` : ""}
+              {company.sector ? ` · ${company.sector}` : ""}
             </div>
           </div>
         </div>
-        <div className="flex gap-7 items-center">
-          <Metric
-            label="Market Cap"
-            value={formatUSD(company.market_cap_usd)}
-          />
-          <Metric
-            label="Cash"
-            value={formatUSD(company.cash_usd)}
-            sub="most recent"
-          />
-          <Metric
-            label="Runway"
-            value={
-              company.runway_months
-                ? `${company.runway_months} mo`
-                : "profitable"
-            }
-            sub={
-              company.quarterly_burn_usd
-                ? `${formatUSD(company.quarterly_burn_usd)} Q burn`
-                : undefined
-            }
-          />
-          {company.health && <HealthChip health={company.health} />}
-        </div>
+
+        {/* Live price block */}
+        {hasPrice && (
+          <div className="flex items-baseline gap-3">
+            <span className="font-mono text-2xl font-bold leading-none">
+              ${quote!.price!.toFixed(2)}
+            </span>
+            <span
+              className={`font-mono text-sm font-semibold ${
+                changeDir > 0
+                  ? "text-accent-green"
+                  : changeDir < 0
+                    ? "text-accent-red"
+                    : "text-text-dim"
+              }`}
+            >
+              {changeDir >= 0 ? "+" : ""}
+              {quote!.change?.toFixed(2) ?? "0.00"} (
+              {changeDir >= 0 ? "+" : ""}
+              {quote!.percent_change?.toFixed(2) ?? "0.00"}%)
+            </span>
+            {quote!.is_market_open === false && (
+              <span className="text-[10px] uppercase tracking-wider text-text-dimmer border border-border-subtle px-1.5 py-0.5 rounded">
+                Closed
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Metrics row */}
+      <div className="px-8 py-4 border-b border-border-subtle flex flex-wrap gap-x-8 gap-y-4 items-center">
+        <Metric
+          label="Market Cap"
+          value={formatUSD(company.market_cap_usd)}
+        />
+        <Metric
+          label="Cash"
+          value={formatUSD(company.cash_usd)}
+          sub="most recent"
+        />
+        <Metric
+          label="Runway"
+          value={
+            company.runway_months
+              ? `${company.runway_months} mo`
+              : "profitable"
+          }
+          sub={
+            company.quarterly_burn_usd
+              ? `${formatUSD(company.quarterly_burn_usd)} Q burn`
+              : undefined
+          }
+        />
+        <Metric
+          label="P/E (TTM)"
+          value={
+            company.pe_ratio != null ? company.pe_ratio.toFixed(1) : "—"
+          }
+          sub={
+            company.eps_ttm != null
+              ? `EPS $${company.eps_ttm.toFixed(2)}`
+              : "unprofitable"
+          }
+        />
+        <Metric
+          label="52-Wk Range"
+          value={formatRange(
+            quote?.fifty_two_week_low,
+            quote?.fifty_two_week_high,
+          )}
+        />
+        <Metric
+          label="Avg Volume"
+          value={formatVolume(quote?.average_volume)}
+          sub="3-month"
+        />
+        {company.health && <HealthChip health={company.health} />}
       </div>
 
       {company.description && (
@@ -200,4 +272,17 @@ function formatUSD(n?: number | null): string {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
   return `$${n}`;
+}
+
+function formatVolume(n?: number | null): string {
+  if (n == null) return "—";
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return `${n}`;
+}
+
+function formatRange(lo?: number | null, hi?: number | null): string {
+  if (lo == null || hi == null) return "—";
+  return `$${lo.toFixed(2)} – $${hi.toFixed(2)}`;
 }
