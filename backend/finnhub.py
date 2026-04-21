@@ -23,6 +23,7 @@ Design decisions:
 from __future__ import annotations
 
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from time import time as _now
 
@@ -39,6 +40,70 @@ _DEFAULT_WINDOW_DAYS = 90
 def _api_key() -> str | None:
     key = os.getenv("FINNHUB_API_KEY")
     return key.strip() if key else None
+
+
+# ---------------------------------------------------------------------------
+# Noise filters — company-scoping + list/roundup detection
+# ---------------------------------------------------------------------------
+# Finnhub's /company-news endpoint is not exclusively about the queried
+# ticker: it pulls in competitor coverage, ETF roundups, and sector
+# commentary that merely mentions the symbol. Two filters below try to keep
+# only headlines genuinely centered on the tracked company.
+
+# Common all-caps tokens that look like tickers but aren't — so we don't
+# miscount "FDA, CEO, and NDA" as three tickers when detecting list articles.
+_COMMON_ACRONYMS: set[str] = {
+    "FDA", "EMA", "EPA", "CEO", "CFO", "COO", "CTO", "CRL", "NDA", "BLA",
+    "IND", "IPO", "ETF", "SEC", "USA", "NEW", "THE", "AND", "FOR", "NOT",
+    "ALL", "ONE", "TWO", "III", "II", "IV", "VI", "VIII",
+    "NYSE", "ASH", "AACR", "ASCO", "PDUFA",
+    "API", "ESG", "GDP", "GMP", "US", "UK", "EU",
+    "Q1", "Q2", "Q3", "Q4", "YOY", "QOQ",
+}
+
+_TICKER_TOKEN_RE = re.compile(r"\b[A-Z]{2,5}\b")
+
+
+def _looks_like_list_headline(headline: str) -> bool:
+    """True if the headline mentions 3+ distinct ticker-like tokens after
+    excluding common acronyms — a strong signal that the story is a multi-
+    company roundup (ETF coverage, "stocks to watch", sector analysis)
+    rather than a single-company catalyst.
+
+    Example that should match (and be suppressed):
+      "MRNA, SRPT, and KRYS Phase 3 Data Will Shape XBI's 2026 Performance"
+    """
+    tokens = _TICKER_TOKEN_RE.findall(headline or "")
+    real = {t for t in tokens if t not in _COMMON_ACRONYMS}
+    return len(real) >= 3
+
+
+def _company_identifiers(ticker: str, company_name: str | None) -> set[str]:
+    """Build a set of lowercase tokens that should appear in a headline (or
+    summary) for a story to be counted as being about this company.
+
+    Always includes the ticker. If a company name is provided, also includes
+    its first significant word — e.g. "Sarepta" from "Sarepta Therapeutics".
+    That covers the common case where the ticker itself isn't in the
+    headline ("Sarepta surges..." with no "SRPT" anywhere).
+    """
+    idents = {ticker.lower().strip()}
+    if company_name:
+        first = company_name.strip().split()[0] if company_name.strip() else ""
+        if first and len(first) >= 3:
+            idents.add(first.lower())
+    return idents
+
+
+def _mentions_company(
+    headline: str, summary: str, identifiers: set[str]
+) -> bool:
+    """True if any company identifier appears in the combined headline+summary
+    (case-insensitive). Used to drop tangential coverage that Finnhub returned
+    under this ticker but is actually about a competitor or the sector at large.
+    """
+    text = f"{headline} {summary}".lower()
+    return any(ident in text for ident in identifiers)
 
 
 # ---------------------------------------------------------------------------
@@ -155,8 +220,13 @@ _HEADLINE_PATTERNS: list[tuple[tuple[str, ...], str, str, str]] = [
             "acquires",
             "acquisition of",
             "to acquire",
-            "merger",
-            "buyout",
+            "merger agreement",
+            # Bare "merger" and "buyout" are deliberately excluded — they
+            # show up too often as descriptive framing of someone else's
+            # deal ("Sarepta surges as it takes on Novartis' $12B buyout")
+            # rather than marking an actual transaction by the tracked
+            # company. The specific phrases above require a stronger
+            # commitment signal.
         ),
         "licensing",
         "medium",
@@ -262,18 +332,30 @@ async def _fetch_news(
 # Public API
 # ---------------------------------------------------------------------------
 async def get_finnhub_catalysts(
-    ticker: str, window_days: int = _DEFAULT_WINDOW_DAYS, limit: int = 20
+    ticker: str,
+    window_days: int = _DEFAULT_WINDOW_DAYS,
+    limit: int = 20,
+    company_name: str | None = None,
 ) -> list[dict]:
     """Return catalyst events derived from Finnhub company-news headlines.
 
     Only headlines that classify confidently against the keyword patterns are
     surfaced — this keeps the calendar from drowning in generic market chatter.
 
-    Each event is tagged `source: "news"` with the article URL, and we
-    dedup near-duplicate stories (same date + same type) since wire services
-    cross-post aggressively.
+    The `company_name` argument, when provided, enables a tangential-story
+    filter: Finnhub's company-news endpoint sometimes returns articles that
+    merely mention the ticker in passing (competitor news, sector ETF
+    coverage). We require the ticker OR the first word of the company name
+    to appear in the headline+summary before counting a story.
+
+    Each event is tagged `source: "news"` with the article URL. We dedup in
+    two passes: first within each (date, type) bucket (wire cross-posts),
+    then across related types on the same date (a story that hits
+    "positive topline" and "topline results" in different outlets should
+    surface once as `readout-positive`, not twice as positive + generic).
     """
     ticker = ticker.upper().strip()
+    identifiers = _company_identifiers(ticker, company_name)
     today = datetime.utcnow().date()
     from_date = (today - timedelta(days=window_days)).isoformat()
     to_date = today.isoformat()
@@ -282,11 +364,26 @@ async def get_finnhub_catalysts(
     if not raw:
         return []
 
+    # Tracking how many articles each filter drops is useful when tuning
+    # patterns — surfaced in the summary log at the end.
+    skipped_list = 0
+    skipped_tangential = 0
+
     out: list[dict] = []
     for article in raw:
         headline = str(article.get("headline") or "").strip()
         summary_txt = str(article.get("summary") or "").strip()
         if not headline:
+            continue
+
+        # Noise filter #1 — multi-ticker roundup / ETF coverage.
+        if _looks_like_list_headline(headline):
+            skipped_list += 1
+            continue
+
+        # Noise filter #2 — story must actually be about the tracked company.
+        if not _mentions_company(headline, summary_txt, identifiers):
+            skipped_tangential += 1
             continue
 
         classification = classify_headline(headline, summary_txt)
@@ -332,8 +429,8 @@ async def get_finnhub_catalysts(
             }
         )
 
-    # Dedup: same (date, type) → keep the first occurrence (newest wins
-    # because Finnhub returns newest-first).
+    # First dedup pass: same (date, type) → keep the first occurrence
+    # (newest wins because Finnhub returns newest-first).
     seen: set[tuple[str, str]] = set()
     deduped: list[dict] = []
     for e in out:
@@ -343,6 +440,21 @@ async def get_finnhub_catalysts(
         seen.add(key)
         deduped.append(e)
 
+    # Second dedup pass: cross-type suppression for readouts.
+    # Wire services phrase the same story different ways ("positive topline"
+    # → readout-positive, "topline results" → readout). Without this pass
+    # both variants land in the calendar and look like two separate events.
+    # If a date has a strong readout classification (positive/negative), we
+    # drop the plain `readout` on that date.
+    strong_readout_dates = {
+        e["date"] for e in deduped
+        if e["type"] in {"readout-positive", "readout-negative"}
+    }
+    deduped = [
+        e for e in deduped
+        if not (e["type"] == "readout" and e["date"] in strong_readout_dates)
+    ]
+
     deduped.sort(key=lambda e: e["date"])
     if limit and len(deduped) > limit:
         deduped = deduped[-limit:]
@@ -350,7 +462,8 @@ async def get_finnhub_catalysts(
     if raw:
         print(
             f"[bioradar][finnhub] {ticker}: classified {len(out)}/{len(raw)} "
-            f"articles, {len(deduped)} after dedup"
+            f"articles, {len(deduped)} after dedup "
+            f"(skipped {skipped_list} list, {skipped_tangential} tangential)"
         )
     return deduped
 

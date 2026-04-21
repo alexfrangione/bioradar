@@ -1685,11 +1685,21 @@ async def get_catalysts(ticker: str) -> dict:
     # Tag seed events with a source so clients can surface provenance.
     seed = [{**e, "source": e.get("source", "curated")} for e in seed]
 
+    # Look up the company name so the Finnhub layer can distinguish stories
+    # about this company from sector/ETF coverage that merely mentions the
+    # ticker. For seeded tickers we have it directly; for others we fall
+    # through to ticker-only matching (EDGAR could fill it in too, but
+    # that's an extra lookup — not worth the cost here).
+    company_name: str | None = None
+    seed_company = SEED_COMPANIES.get(ticker)
+    if seed_company:
+        company_name = seed_company.get("name")
+
     # Fetch all three machine-derived layers in parallel. Every layer is
     # best-effort; a failure in any one can't 500 the calendar.
     edgar_task = asyncio.create_task(_safe_edgar_catalysts(ticker))
     ctgov_task = asyncio.create_task(_derive_catalysts_from_pipeline(ticker))
-    news_task = asyncio.create_task(_safe_finnhub_catalysts(ticker))
+    news_task = asyncio.create_task(_safe_finnhub_catalysts(ticker, company_name))
     edgar_events, ctgov_events, news_events = await asyncio.gather(
         edgar_task, ctgov_task, news_task
     )
@@ -1729,10 +1739,12 @@ async def _safe_edgar_catalysts(ticker: str) -> list[dict]:
         return []
 
 
-async def _safe_finnhub_catalysts(ticker: str) -> list[dict]:
+async def _safe_finnhub_catalysts(
+    ticker: str, company_name: str | None = None
+) -> list[dict]:
     """Wrapper so a Finnhub outage / rate-limit doesn't break the calendar."""
     try:
-        return await get_finnhub_catalysts(ticker)
+        return await get_finnhub_catalysts(ticker, company_name=company_name)
     except Exception as exc:  # noqa: BLE001
         print(f"[bioradar] finnhub catalyst fetch failed for {ticker}: {exc}")
         return []
