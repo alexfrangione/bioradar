@@ -56,7 +56,11 @@ if frontend_url and frontend_url not in allowed_origins:
 # Allow:
 #   - any localhost / 127.0.0.1 port (dev: 3000, 3001, etc.)
 #   - any *.vercel.app subdomain (production + preview deploys)
-cors_regex = r"^(https://.*\.vercel\.app|http://(localhost|127\.0\.0\.1)(:\d+)?)$"
+#   - bioticker.us and any subdomain (www, staging, etc.)
+cors_regex = (
+    r"^(https://(bioticker\.us|.*\.bioticker\.us|.*\.vercel\.app)"
+    r"|http://(localhost|127\.0\.0\.1)(:\d+)?)$"
+)
 
 app.add_middleware(
     CORSMiddleware,
