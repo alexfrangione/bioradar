@@ -140,7 +140,7 @@ export default function LandingPage() {
       <SiteNav />
 
       {/* ==================== TICKER TAPE ==================== */}
-      <div className="bg-bg-app border-b border-border-subtle py-2.5 overflow-hidden whitespace-nowrap">
+      <div className="bg-bg-elev border-b border-border-subtle py-2.5 overflow-hidden whitespace-nowrap">
         <div className="bt-tape-inner inline-flex gap-9 pl-9">
           {[...TAPE, ...TAPE].map((t, i) => (
             <span
