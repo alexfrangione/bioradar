@@ -114,8 +114,15 @@ export default function LandingPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (showDropdown && hits[highlight]) {
-      go(hits[highlight].symbol);
+    // If the autocomplete returned any hits, the user almost certainly wants
+    // the top match — especially when they typed a company name like "Vertex"
+    // that won't route to a valid ticker page on its own. We key off `hits`
+    // directly rather than `showDropdown` because clicking the Analyze button
+    // fires the outside-click handler and collapses the dropdown before this
+    // submit runs.
+    const pick = hits[highlight] ?? hits[0];
+    if (pick) {
+      go(pick.symbol);
     } else {
       go(query);
     }
