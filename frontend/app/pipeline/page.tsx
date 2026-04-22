@@ -130,7 +130,7 @@ export default function PipelinePage() {
                     {filtered.length}{" "}
                     {filtered.length === 1 ? "drug" : "drugs"}
                   </span>{" "}
-                  across popular biotech · from ClinicalTrials.gov
+                  across popular healthcare · from ClinicalTrials.gov
                 </>
               )}
             </p>

@@ -131,7 +131,7 @@ export default function ScreenerPage() {
                     {filtered.length}{" "}
                     {filtered.length === 1 ? "company" : "companies"}
                   </span>{" "}
-                  across popular biotech · filter by size, health, and runway
+                  across popular healthcare · filter by size, health, and runway
                 </>
               )}
             </p>

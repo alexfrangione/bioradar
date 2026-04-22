@@ -11,7 +11,7 @@ import SiteNav from "@/components/SiteNav";
 //
 // Finviz-style tile map. Fans out getCompany() + getQuote() across the popular
 // universe, sizes tiles by sqrt(market cap) and colors them by today's percent
-// change. Intended as a one-glance sentiment pulse of the biotech field.
+// change. Intended as a one-glance sentiment pulse of the healthcare sector.
 // ---------------------------------------------------------------------------
 
 type Tile = {
@@ -92,7 +92,7 @@ export default function HeatmapPage() {
                   <span className="text-accent-red font-medium">
                     {down} down
                   </span>
-                  {" "}across popular biotech · tile size = market cap
+                  {" "}across popular healthcare · tile size = market cap
                 </>
               )}
             </p>

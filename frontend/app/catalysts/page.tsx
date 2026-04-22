@@ -299,7 +299,7 @@ export default function CatalystsPage() {
                     <>
                       across {tickers.length}{" "}
                       {tickers.length === 1 ? "ticker" : "tickers"}
-                      {universe === "popular" ? " (popular biotech)" : ""} ·{" "}
+                      {universe === "popular" ? " (popular healthcare)" : ""} ·{" "}
                     </>
                   )}
                   {dateRange}
