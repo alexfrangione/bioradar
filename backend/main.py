@@ -1166,11 +1166,15 @@ async def get_screener(tickers: str = "") -> dict:
     if cached and (_now() - cached[0]) < _SCREENER_TTL_SECONDS:
         return {"count": len(cached[1]), "rows": cached[1], "cached": True}
 
-    # Decide who actually needs a fresh Twelve Data quote.
+    # Decide who actually needs a fresh quote pull.
+    # Twelve Data free tier (8 credits/min) can't serve a 98-ticker screener
+    # fan-out — batched or not — so the primary source here is yfinance via
+    # one bulk download. Same pattern, same Render-proven library that
+    # backs /api/company/{ticker}/prices.
     to_fetch: list[str] = []
     for t in tickers_list:
         if t in SEED_COMPANIES:
-            continue  # seeded rows don't need Twelve Data
+            continue  # seeded rows already have fundamentals baked in
         cached_quote = _quote_cache.get(t)
         if cached_quote and _cache_fresh(
             cached_quote[0], cached_quote[1], _QUOTE_TTL_SECONDS
@@ -1179,7 +1183,13 @@ async def get_screener(tickers: str = "") -> dict:
         to_fetch.append(t)
 
     if to_fetch:
-        await _fetch_twelvedata_quote_batch(to_fetch)
+        derived = await asyncio.to_thread(_fetch_yfinance_bulk_sync, to_fetch, "1y")
+        for t in to_fetch:
+            quote = derived.get(t)
+            # Populate _quote_cache either way: cache the derived payload on
+            # success, short negative-cache on miss so single-ticker /quote
+            # calls don't re-spin yfinance if it yielded nothing.
+            _quote_cache[t] = (_now(), quote if quote else None)
 
     async def build_row(ticker: str) -> dict | None:
         seed = SEED_COMPANIES.get(ticker)
@@ -1283,6 +1293,14 @@ async def get_company(ticker: str) -> dict:
         # EDGAR returns shares_outstanding + eps_ttm directly.
         get_edgar_company_data(ticker),
     )
+
+    # If Twelve Data missed (rate-limit / unconfigured), derive price from
+    # yfinance so market-cap and P/E math still has a price to multiply by.
+    if quote_basic is None:
+        derived = await asyncio.to_thread(_fetch_yfinance_bulk_sync, [ticker], "1y")
+        quote_basic = derived.get(ticker)
+        if quote_basic is not None:
+            _quote_cache[ticker] = (_now(), quote_basic)
 
     # Re-compute market cap and P/E now that we have the price.
     price = _to_float(quote_basic.get("close")) if isinstance(quote_basic, dict) else None
@@ -1880,6 +1898,124 @@ def _fetch_yfinance(ticker: str, period: str) -> list[dict]:
     return points
 
 
+def _derive_quote_from_points(points: list[dict]) -> dict | None:
+    """Build a quote-shape dict (price, 52w high/low, avg volume) from a
+    list of daily OHLCV points. Returns None if the list is empty.
+
+    Used as a Twelve Data-free fallback so /api/company/{ticker}/quote
+    still yields 52w range + avg volume even when Twelve Data's 8-credit/min
+    free-tier ceiling rate-limits us.
+    """
+    if not points:
+        return None
+    closes = [p["close"] for p in points if p.get("close") is not None]
+    if not closes:
+        return None
+    volumes = [p["volume"] for p in points if p.get("volume")]
+    last = float(closes[-1])
+    prev = float(closes[-2]) if len(closes) >= 2 else last
+    hi = max(float(c) for c in closes)
+    lo = min(float(c) for c in closes)
+    avg_vol = int(sum(volumes) / len(volumes)) if volumes else None
+    return {
+        "close": last,
+        "previous_close": prev,
+        "change": last - prev,
+        "percent_change": ((last - prev) / prev * 100) if prev else None,
+        "volume": volumes[-1] if volumes else None,
+        "average_volume": avg_vol,
+        "fifty_two_week": {"high": hi, "low": lo, "range": f"{lo:.2f} - {hi:.2f}"},
+        "datetime": points[-1].get("date"),
+    }
+
+
+def _fetch_yfinance_bulk_sync(
+    tickers: list[str], period: str = "1y"
+) -> dict[str, dict]:
+    """One yf.download call for all tickers. Returns map of ticker -> quote
+    dict derived via _derive_quote_from_points.
+
+    yfinance batches efficiently when you pass space-separated tickers and
+    group_by='ticker'. 98 tickers × 1y history is one Yahoo call (with the
+    curl_cffi session to dodge their scraping filter), which is how the
+    existing /prices endpoint already runs reliably on Render.
+    """
+    try:
+        import yfinance as yf  # type: ignore
+    except ImportError:
+        return {}
+    if not tickers:
+        return {}
+
+    session = _yf_session()
+    kwargs: dict[str, Any] = {
+        "tickers": " ".join(tickers),
+        "period": period,
+        "auto_adjust": True,
+        "progress": False,
+        "threads": True,
+        "group_by": "ticker",
+    }
+    if session is not None:
+        kwargs["session"] = session
+
+    try:
+        df = yf.download(**kwargs)
+    except Exception:  # noqa: BLE001
+        return {}
+
+    if df is None or getattr(df, "empty", True):
+        return {}
+
+    out: dict[str, dict] = {}
+    multi = hasattr(df.columns, "nlevels") and df.columns.nlevels > 1
+
+    for t in tickers:
+        try:
+            if multi:
+                if t not in df.columns.get_level_values(0):
+                    continue
+                sub = df[t]
+            else:
+                sub = df
+            if sub is None or getattr(sub, "empty", True):
+                continue
+            if "Close" not in sub.columns:
+                continue
+            # Build point list from the sub-frame, then reuse _derive_quote_from_points.
+            points: list[dict] = []
+            for idx, row in sub.iterrows():
+                close_val = row.get("Close")
+                if close_val is None or close_val != close_val:
+                    continue
+                try:
+                    close_f = float(close_val)
+                except (TypeError, ValueError):
+                    continue
+                vol_val = row.get("Volume")
+                try:
+                    vol_i = (
+                        int(vol_val)
+                        if vol_val is not None and vol_val == vol_val
+                        else 0
+                    )
+                except (TypeError, ValueError):
+                    vol_i = 0
+                points.append(
+                    {
+                        "date": idx.strftime("%Y-%m-%d"),
+                        "close": close_f,
+                        "volume": vol_i,
+                    }
+                )
+            derived = _derive_quote_from_points(points)
+            if derived is not None:
+                out[t] = derived
+        except Exception:  # noqa: BLE001
+            continue
+    return out
+
+
 async def _fetch_twelvedata_prices(
     ticker: str, period: str
 ) -> tuple[list[dict], str | None]:
@@ -2012,15 +2148,28 @@ async def get_quote(ticker: str) -> dict:
     52-week range + avg-volume for every concurrent visitor.
     """
     ticker = ticker.upper().strip()
-    if not os.getenv("TWELVE_DATA_API_KEY"):
+
+    # Primary: Twelve Data /quote (if configured). Gives us name, exchange,
+    # intraday open/high/low, and pre-computed 52w + avg volume.
+    data = None
+    if os.getenv("TWELVE_DATA_API_KEY"):
+        data = await _fetch_twelvedata_quote_basic(ticker)
+
+    # Fallback: derive price + 52w range + avg volume from a year of yfinance
+    # OHLCV. Works when Twelve Data is rate-limited (free-tier 8/min ceiling),
+    # unconfigured, or transiently unreachable. yfinance backs /prices on
+    # Render so we know it's reliable there.
+    if data is None:
+        derived = await asyncio.to_thread(_fetch_yfinance_bulk_sync, [ticker], "1y")
+        data = derived.get(ticker)
+        if data is not None:
+            _quote_cache[ticker] = (_now(), data)
+
+    if data is None:
         return {
             "ticker": ticker,
-            "error": "TWELVE_DATA_API_KEY not configured on the server.",
+            "error": "quote data unavailable from Twelve Data and yfinance",
         }
-
-    data = await _fetch_twelvedata_quote_basic(ticker)
-    if data is None:
-        return {"ticker": ticker, "error": "twelvedata unavailable (rate limit or network)"}
 
     fw = data.get("fifty_two_week") or {}
 
