@@ -1183,13 +1183,32 @@ async def get_screener(tickers: str = "") -> dict:
         to_fetch.append(t)
 
     if to_fetch:
-        derived = await asyncio.to_thread(_fetch_yfinance_bulk_sync, to_fetch, "1y")
+        # Yahoo gets grumpy at 90+ tickers in one call (anti-scraping), so we
+        # chunk and run the chunks concurrently in threads. Each chunk is one
+        # curl_cffi-backed yf.download call.
+        CHUNK = 15
+        chunks = [to_fetch[i : i + CHUNK] for i in range(0, len(to_fetch), CHUNK)]
+        chunk_results = await asyncio.gather(
+            *[
+                asyncio.to_thread(_fetch_yfinance_bulk_sync, chunk, "1y")
+                for chunk in chunks
+            ],
+            return_exceptions=True,
+        )
+        derived: dict[str, dict] = {}
+        for result in chunk_results:
+            if isinstance(result, dict):
+                derived.update(result)
+
         for t in to_fetch:
             quote = derived.get(t)
-            # Populate _quote_cache either way: cache the derived payload on
-            # success, short negative-cache on miss so single-ticker /quote
-            # calls don't re-spin yfinance if it yielded nothing.
-            _quote_cache[t] = (_now(), quote if quote else None)
+            if quote is not None:
+                # Cache successful quote for the full 10 min TTL.
+                _quote_cache[t] = (_now(), quote)
+            # On miss we deliberately do NOT populate a negative cache entry:
+            # other code paths (single-ticker /quote) should be free to retry
+            # via their own fallback chain rather than inherit a miss from
+            # the bulk screener load.
 
     async def build_row(ticker: str) -> dict | None:
         seed = SEED_COMPANIES.get(ticker)
@@ -1265,7 +1284,12 @@ async def get_screener(tickers: str = "") -> dict:
         if isinstance(r, dict):
             rows.append(r)
 
-    _screener_cache[cache_key] = (_now(), rows)
+    # Only cache if we got a reasonable density of data. Caching a partial
+    # failure (say only the 5 seeds resolved) would stick the screener at
+    # "only 5 companies" for the full 5-min window even after upstream
+    # recovers. Threshold = 50% of requested tickers.
+    if len(rows) >= max(1, len(tickers_list) // 2):
+        _screener_cache[cache_key] = (_now(), rows)
     return {"count": len(rows), "rows": rows}
 
 
