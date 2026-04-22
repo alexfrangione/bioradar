@@ -90,6 +90,7 @@ app.add_middleware(
 _CACHE_RULES: tuple[tuple[str, str], ...] = (
     ("/api/health", "public, max-age=60"),
     ("/api/search", "public, max-age=120, stale-while-revalidate=300"),
+    ("/api/screener", "public, max-age=300, stale-while-revalidate=600"),
     ("/quote", "public, max-age=60, stale-while-revalidate=120"),
     ("/prices", "public, max-age=300, stale-while-revalidate=600"),
     ("/pipeline", "public, max-age=900, stale-while-revalidate=1800"),
@@ -908,15 +909,28 @@ def list_companies() -> dict:
 # caching that ceilings the site at 4 page loads/minute before null fields
 # start showing. 120s of staleness is fine for market-cap-style data.
 _PROFILE_TTL_SECONDS = 3600  # 1 hour — profile data is near-static
-_QUOTE_TTL_SECONDS = 120     # 2 minutes — enough to smooth bursts
+_QUOTE_TTL_SECONDS = 600     # 10 minutes — screener-scale fan-out needs headroom;
+                              # quote movement within 10 min is noise for the
+                              # market-cap / 52w / avg-vol fields we display
+_SCREENER_TTL_SECONDS = 300  # 5 min cache for the full screener payload
 _FAIL_TTL_SECONDS = 60       # 60s negative cache so a single rate-limit
                               # doesn't hide fields for an hour
 
+# Global Twelve Data concurrency cap. Free tier is 8 credits/min; if every
+# tab / screener load fires requests concurrently, we trip the per-minute
+# limit instantly and everything downstream negative-caches. Serialising to
+# 2-at-a-time dramatically reduces burst failures.
+_TD_SEMAPHORE = asyncio.Semaphore(2)
+
 _profile_cache: dict[str, tuple[float, dict | None]] = {}
 # ticker (upper) → (timestamp, raw /quote JSON or None). Shared by
-# _fetch_twelvedata_quote_basic (used by get_company) AND the /quote
-# endpoint so both code paths amortise one API call per ticker.
+# _fetch_twelvedata_quote_basic (used by get_company), the /quote
+# endpoint, AND the batched /api/screener endpoint so one network call
+# feeds every code path that needs quote data.
 _quote_cache: dict[str, tuple[float, dict | None]] = {}
+# Screener response cache — keyed by the sorted ticker CSV so different
+# filters (same ticker set) hit the same cached row array.
+_screener_cache: dict[str, tuple[float, list[dict]]] = {}
 
 
 def _cache_fresh(ts: float, val: object, success_ttl: int) -> bool:
@@ -937,11 +951,12 @@ async def _fetch_twelvedata_profile(ticker: str) -> dict | None:
         return cached[1]
 
     try:
-        async with httpx.AsyncClient(timeout=12.0) as client:
-            r = await client.get(
-                "https://api.twelvedata.com/profile",
-                params={"symbol": ticker, "apikey": api_key},
-            )
+        async with _TD_SEMAPHORE:
+            async with httpx.AsyncClient(timeout=12.0) as client:
+                r = await client.get(
+                    "https://api.twelvedata.com/profile",
+                    params={"symbol": ticker, "apikey": api_key},
+                )
         if r.status_code != 200:
             _profile_cache[ticker] = (_now(), None)
             return None
@@ -973,11 +988,12 @@ async def _fetch_twelvedata_quote_basic(ticker: str) -> dict | None:
         return cached[1]
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            r = await client.get(
-                "https://api.twelvedata.com/quote",
-                params={"symbol": ticker, "apikey": api_key},
-            )
+        async with _TD_SEMAPHORE:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                r = await client.get(
+                    "https://api.twelvedata.com/quote",
+                    params={"symbol": ticker, "apikey": api_key},
+                )
         if r.status_code != 200:
             _quote_cache[ticker] = (_now(), None)
             return None
@@ -992,6 +1008,69 @@ async def _fetch_twelvedata_quote_basic(ticker: str) -> dict | None:
         return None
 
 
+async def _fetch_twelvedata_quote_batch(tickers: list[str]) -> dict[str, dict | None]:
+    """Batch /quote: comma-separated symbols, one HTTP call per chunk.
+
+    Twelve Data accepts up to ~120 symbols per /quote call. Each symbol is
+    still billed as 1 credit, but we collapse N round-trips into 1. When >1
+    symbol is requested, the API returns a dict keyed by symbol; when 1, it
+    returns the quote object directly. This helper normalises both.
+
+    Side-effect: populates _quote_cache for every ticker we asked about so
+    that subsequent single-ticker lookups (from get_company / /quote) hit
+    cache and don't re-spend credits.
+    """
+    if not tickers:
+        return {}
+    api_key = os.getenv("TWELVE_DATA_API_KEY")
+    if not api_key:
+        return {t: None for t in tickers}
+
+    # 60/chunk keeps URLs comfortably short and leaves headroom.
+    results: dict[str, dict | None] = {t: None for t in tickers}
+    CHUNK = 60
+    for i in range(0, len(tickers), CHUNK):
+        chunk = tickers[i : i + CHUNK]
+        symbol_param = ",".join(chunk)
+        try:
+            async with _TD_SEMAPHORE:
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    r = await client.get(
+                        "https://api.twelvedata.com/quote",
+                        params={"symbol": symbol_param, "apikey": api_key},
+                    )
+            if r.status_code != 200:
+                for t in chunk:
+                    _quote_cache[t] = (_now(), None)
+                continue
+            payload = r.json()
+            if len(chunk) == 1:
+                if (
+                    not isinstance(payload, dict)
+                    or payload.get("status") == "error"
+                ):
+                    _quote_cache[chunk[0]] = (_now(), None)
+                else:
+                    _quote_cache[chunk[0]] = (_now(), payload)
+                    results[chunk[0]] = payload
+            else:
+                if not isinstance(payload, dict):
+                    for t in chunk:
+                        _quote_cache[t] = (_now(), None)
+                    continue
+                for t in chunk:
+                    entry = payload.get(t)
+                    if isinstance(entry, dict) and entry.get("status") != "error":
+                        _quote_cache[t] = (_now(), entry)
+                        results[t] = entry
+                    else:
+                        _quote_cache[t] = (_now(), None)
+        except httpx.HTTPError:
+            for t in chunk:
+                _quote_cache[t] = (_now(), None)
+    return results
+
+
 async def _fetch_twelvedata_statistics(ticker: str) -> dict | None:
     """Fetch market cap, P/E, EPS, shares from Twelve Data /statistics.
 
@@ -1002,11 +1081,12 @@ async def _fetch_twelvedata_statistics(ticker: str) -> dict | None:
     if not api_key:
         return None
     try:
-        async with httpx.AsyncClient(timeout=12.0) as client:
-            r = await client.get(
-                "https://api.twelvedata.com/statistics",
-                params={"symbol": ticker, "apikey": api_key},
-            )
+        async with _TD_SEMAPHORE:
+            async with httpx.AsyncClient(timeout=12.0) as client:
+                r = await client.get(
+                    "https://api.twelvedata.com/statistics",
+                    params={"symbol": ticker, "apikey": api_key},
+                )
         if r.status_code != 200:
             return None
         data = r.json()
@@ -1056,6 +1136,127 @@ def _clean_sponsor_name(name: str) -> str:
             break
         cleaned = new
     return cleaned
+
+
+@app.get("/api/screener")
+async def get_screener(tickers: str = "") -> dict:
+    """Batched row data for the Screener page.
+
+    Collapses the old "fire 98 getCompany() calls from the browser" pattern
+    into a single backend call. That pattern would burn 98 Twelve Data
+    credits inside a minute on the free tier (8 credits/min) and leave 90+
+    tickers negative-cached with no fundamentals.
+
+    Strategy:
+      1. Reuse fresh entries in _quote_cache where available.
+      2. Single batched Twelve Data /quote for everything else (comma-
+         separated symbols, one HTTP round trip).
+      3. Per-ticker EDGAR fundamentals (already throttled via _SEC_SEMAPHORE
+         in edgar.py).
+      4. Compute market_cap = shares × price, pe = price / eps.
+      5. Cache the assembled rows for 5 min so fast re-visits are free.
+    """
+    tickers_list = [t.strip().upper() for t in tickers.split(",") if t.strip()]
+    if not tickers_list:
+        return {"count": 0, "rows": []}
+
+    # Response-level cache keyed by the requested ticker set.
+    cache_key = ",".join(sorted(tickers_list))
+    cached = _screener_cache.get(cache_key)
+    if cached and (_now() - cached[0]) < _SCREENER_TTL_SECONDS:
+        return {"count": len(cached[1]), "rows": cached[1], "cached": True}
+
+    # Decide who actually needs a fresh Twelve Data quote.
+    to_fetch: list[str] = []
+    for t in tickers_list:
+        if t in SEED_COMPANIES:
+            continue  # seeded rows don't need Twelve Data
+        cached_quote = _quote_cache.get(t)
+        if cached_quote and _cache_fresh(
+            cached_quote[0], cached_quote[1], _QUOTE_TTL_SECONDS
+        ):
+            continue
+        to_fetch.append(t)
+
+    if to_fetch:
+        await _fetch_twelvedata_quote_batch(to_fetch)
+
+    async def build_row(ticker: str) -> dict | None:
+        seed = SEED_COMPANIES.get(ticker)
+        if seed is not None:
+            return {
+                "ticker": ticker,
+                "name": seed.get("name"),
+                "market_cap_usd": seed.get("market_cap_usd"),
+                "runway_months": seed.get("runway_months"),
+                "pe_ratio": seed.get("pe_ratio"),
+                "health": seed.get("health"),
+                "placeholder": seed.get("placeholder", False),
+            }
+        edgar_data = await get_edgar_company_data(ticker)
+        quote_cached = _quote_cache.get(ticker)
+        quote = quote_cached[1] if quote_cached else None
+        price = (
+            _to_float(quote.get("close"))
+            if isinstance(quote, dict)
+            else None
+        )
+
+        name = None
+        if isinstance(edgar_data, dict):
+            name = edgar_data.get("name")
+        if not name and isinstance(quote, dict):
+            name = quote.get("name")
+
+        market_cap = None
+        pe_ratio = None
+        runway_months = None
+        if isinstance(edgar_data, dict):
+            shares = edgar_data.get("shares_outstanding")
+            eps = edgar_data.get("eps_ttm")
+            if shares and price is not None:
+                try:
+                    market_cap = float(price) * float(shares)
+                except (TypeError, ValueError):
+                    pass
+            if eps and eps > 0 and price is not None:
+                try:
+                    pe_ratio = float(price) / float(eps)
+                except (TypeError, ValueError, ZeroDivisionError):
+                    pass
+            runway_months = edgar_data.get("runway_months")
+            if market_cap is None:
+                market_cap = edgar_data.get("market_cap_usd")
+            if pe_ratio is None:
+                pe_ratio = edgar_data.get("pe_ratio")
+
+        if (
+            name is None
+            and market_cap is None
+            and runway_months is None
+            and pe_ratio is None
+        ):
+            return None
+        return {
+            "ticker": ticker,
+            "name": name,
+            "market_cap_usd": market_cap,
+            "runway_months": runway_months,
+            "pe_ratio": pe_ratio,
+            "health": None,
+            "placeholder": False,
+        }
+
+    rows_raw = await asyncio.gather(
+        *[build_row(t) for t in tickers_list], return_exceptions=True
+    )
+    rows: list[dict] = []
+    for r in rows_raw:
+        if isinstance(r, dict):
+            rows.append(r)
+
+    _screener_cache[cache_key] = (_now(), rows)
+    return {"count": len(rows), "rows": rows}
 
 
 @app.get("/api/company/{ticker}")

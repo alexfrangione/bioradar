@@ -217,6 +217,27 @@ export function getCompany(ticker: string) {
   return getJSON<Company>(`/api/company/${encodeURIComponent(ticker)}`);
 }
 
+export type ScreenerRow = {
+  ticker: string;
+  name: string | null;
+  market_cap_usd?: number | null;
+  runway_months?: number | null;
+  pe_ratio?: number | null;
+  health?: Company["health"];
+  placeholder?: boolean;
+};
+
+export type ScreenerResponse = {
+  count: number;
+  rows: ScreenerRow[];
+  cached?: boolean;
+};
+
+export function getScreener(tickers: string[]) {
+  const q = encodeURIComponent(tickers.join(","));
+  return getJSON<ScreenerResponse>(`/api/screener?tickers=${q}`);
+}
+
 export function getPipeline(ticker: string, limit: number = 25) {
   return getJSON<PipelineResponse>(
     `/api/company/${encodeURIComponent(ticker)}/pipeline?limit=${limit}`,

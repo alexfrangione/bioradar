@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { getCompany, type Company } from "@/lib/api";
+import { getScreener, type Company, type ScreenerRow } from "@/lib/api";
 import { POPULAR_TICKERS } from "@/lib/universe";
 import SiteNav from "@/components/SiteNav";
 
@@ -14,7 +14,7 @@ import SiteNav from "@/components/SiteNav";
 // pick a size band and runway profile, click into the interesting names.
 // ---------------------------------------------------------------------------
 
-type Row = Company & { ticker: string };
+type Row = ScreenerRow & { ticker: string };
 
 // Filter buckets. Market cap is bucketed rather than slider-based so users can
 // think in standard biotech size bands (mega / large / mid / small / nano).
@@ -61,21 +61,19 @@ export default function ScreenerPage() {
   const [runway, setRunway] = useState<RunwayFilter>("all");
   const [sort, setSort] = useState<SortKey>("marketCap");
 
-  // Fan-out fetch once on mount. getCompany is cheap — the backend caches the
-  // SEC EDGAR fundamentals — and the list is ~15 tickers.
+  // Single batched call: the backend fans out Twelve Data + EDGAR server-side,
+  // caches the assembled rows for 5 min, and returns the whole table in one
+  // response. This replaces the old 98-parallel-getCompany pattern which
+  // blew past Twelve Data's free-tier 8-credit/min ceiling and left most
+  // rows with null market cap / P/E.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const results = await Promise.all(
-        POPULAR_TICKERS.map(async (t) => {
-          const c = await getCompany(t);
-          if (!c) return null;
-          return { ...c, ticker: t } as Row;
-        }),
-      );
+      const resp = await getScreener(POPULAR_TICKERS);
       if (cancelled) return;
-      setRows(results.filter(Boolean) as Row[]);
+      const incoming = resp?.rows ?? [];
+      setRows(incoming.map((r) => ({ ...r, ticker: r.ticker })));
       setLoading(false);
     })();
     return () => {
@@ -277,7 +275,7 @@ export default function ScreenerPage() {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function formatCap(v: number | undefined): string {
+function formatCap(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v)) return "—";
   if (v >= 1e12) return `$${(v / 1e12).toFixed(2)}T`;
   if (v >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
