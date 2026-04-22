@@ -2173,46 +2173,83 @@ async def get_quote(ticker: str) -> dict:
     """
     ticker = ticker.upper().strip()
 
-    # Primary: Twelve Data /quote (if configured). Gives us name, exchange,
-    # intraday open/high/low, and pre-computed 52w + avg volume.
-    data = None
-    if os.getenv("TWELVE_DATA_API_KEY"):
-        data = await _fetch_twelvedata_quote_basic(ticker)
-
-    # Fallback: derive price + 52w range + avg volume from a year of yfinance
-    # OHLCV. Works when Twelve Data is rate-limited (free-tier 8/min ceiling),
-    # unconfigured, or transiently unreachable. yfinance backs /prices on
-    # Render so we know it's reliable there.
-    if data is None:
-        derived = await asyncio.to_thread(_fetch_yfinance_bulk_sync, [ticker], "1y")
+    # Primary: yfinance-derived quote. 52w high/low + avg volume are
+    # computed deterministically from 1y of OHLCV, so they're always
+    # populated when history exists. Twelve Data's /quote sometimes returns
+    # 200 OK with null fifty_two_week or empty average_volume depending on
+    # the symbol and plan tier, which showed up as the "sometimes works,
+    # sometimes doesn't" flakiness.
+    data: dict | None = None
+    cached = _quote_cache.get(ticker)
+    if cached and _cache_fresh(cached[0], cached[1], _QUOTE_TTL_SECONDS):
+        data = cached[1]
+    else:
+        derived = await asyncio.to_thread(
+            _fetch_yfinance_bulk_sync, [ticker], "1y"
+        )
         data = derived.get(ticker)
         if data is not None:
             _quote_cache[ticker] = (_now(), data)
 
-    if data is None:
+    # Secondary: Twelve Data /quote, used only to fill gaps (name, exchange,
+    # intraday fields, or as a price source if yfinance was empty). We do
+    # NOT let Twelve Data overwrite yfinance-derived 52w or avg volume —
+    # those are the fields we want to be reliable.
+    td: dict | None = None
+    if os.getenv("TWELVE_DATA_API_KEY"):
+        td = await _fetch_twelvedata_quote_basic(ticker)
+
+    if data is None and td is None:
         return {
             "ticker": ticker,
-            "error": "quote data unavailable from Twelve Data and yfinance",
+            "error": "quote data unavailable from yfinance and Twelve Data",
         }
 
+    if data is None:
+        data = td or {}
+
+    # Merge: yfinance wins for numeric fields, Twelve Data fills in metadata.
+    def first(*vals):
+        for v in vals:
+            if v not in (None, "", {}):
+                return v
+        return None
+
+    name = first(data.get("name"), (td or {}).get("name"))
+    exchange = first(data.get("exchange"), (td or {}).get("exchange"))
+
     fw = data.get("fifty_two_week") or {}
+    # If yfinance history was empty but Twelve Data returned something,
+    # use their fifty_two_week payload as a fallback.
+    if not fw and td:
+        fw = td.get("fifty_two_week") or {}
 
     return {
         "ticker": ticker,
-        "name": data.get("name"),
-        "exchange": data.get("exchange"),
-        "currency": data.get("currency", "USD"),
-        "datetime": data.get("datetime"),
-        "is_market_open": bool(data.get("is_market_open", False)),
-        "price": _to_float(data.get("close")),
-        "previous_close": _to_float(data.get("previous_close")),
-        "change": _to_float(data.get("change")),
-        "percent_change": _to_float(data.get("percent_change")),
-        "open": _to_float(data.get("open")),
-        "high": _to_float(data.get("high")),
-        "low": _to_float(data.get("low")),
-        "volume": _to_int(data.get("volume")),
-        "average_volume": _to_int(data.get("average_volume")),
+        "name": name,
+        "exchange": exchange,
+        "currency": data.get("currency") or (td or {}).get("currency") or "USD",
+        "datetime": data.get("datetime") or (td or {}).get("datetime"),
+        "is_market_open": bool((td or {}).get("is_market_open", False)),
+        "price": _to_float(
+            first(data.get("close"), (td or {}).get("close"))
+        ),
+        "previous_close": _to_float(
+            first(data.get("previous_close"), (td or {}).get("previous_close"))
+        ),
+        "change": _to_float(
+            first(data.get("change"), (td or {}).get("change"))
+        ),
+        "percent_change": _to_float(
+            first(data.get("percent_change"), (td or {}).get("percent_change"))
+        ),
+        "open": _to_float((td or {}).get("open")),
+        "high": _to_float((td or {}).get("high")),
+        "low": _to_float((td or {}).get("low")),
+        "volume": _to_int(first(data.get("volume"), (td or {}).get("volume"))),
+        "average_volume": _to_int(
+            first(data.get("average_volume"), (td or {}).get("average_volume"))
+        ),
         "fifty_two_week_low": _to_float(fw.get("low")),
         "fifty_two_week_high": _to_float(fw.get("high")),
         "fifty_two_week_range": fw.get("range"),
