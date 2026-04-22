@@ -30,15 +30,35 @@ import httpx
 # Config + caches
 # ---------------------------------------------------------------------------
 _CACHE_TTL = 12 * 3600  # 12 hours
+# Failed fetches (429, 5xx, connection errors) get cached briefly so we
+# don't hammer SEC, but short enough that the next user request can
+# recover instead of seeing empty data for 12 hours.
+_FAIL_CACHE_TTL = 90  # 90 seconds
+
+# SEC's fair-access rules: 10 req/s per IP. Our warmup fans out ~100
+# tickers × 2 endpoints ≈ 200 concurrent requests, which blows through
+# that limit and gets a stream of 429s. The semaphore caps inflight SEC
+# requests so warmup (and bursts from simultaneous page loads) stay
+# well under the limit — 4 concurrent × typical 200-400ms latency = 10-20
+# req/s sustained, safely inside the window.
+_SEC_SEMAPHORE = asyncio.Semaphore(4)
 
 # ticker (upper) → 10-digit CIK
 _ticker_to_cik: dict[str, str] = {}
 _ticker_map_loaded_at: float = 0.0
 
-# CIK → (timestamp, companyfacts JSON)
+# CIK → (timestamp, companyfacts JSON). None value = recent failure (retry after _FAIL_CACHE_TTL).
 _facts_cache: dict[str, tuple[float, dict | None]] = {}
-# CIK → (timestamp, submissions JSON)
+# CIK → (timestamp, submissions JSON). None value = recent failure (retry after _FAIL_CACHE_TTL).
 _subs_cache: dict[str, tuple[float, dict | None]] = {}
+
+
+def _cache_is_fresh(entry: tuple[float, dict | None]) -> bool:
+    """Success entries are fresh for _CACHE_TTL; failure entries (None value)
+    only for _FAIL_CACHE_TTL so transient SEC errors don't stick for 12h."""
+    ts, val = entry
+    ttl = _CACHE_TTL if val is not None else _FAIL_CACHE_TTL
+    return (_now() - ts) < ttl
 
 
 def _user_agent() -> str:
@@ -69,8 +89,9 @@ async def _load_ticker_map() -> dict[str, str]:
 
     url = "https://www.sec.gov/files/company_tickers.json"
     try:
-        async with httpx.AsyncClient(timeout=20.0, headers=_headers()) as c:
-            r = await c.get(url)
+        async with _SEC_SEMAPHORE:
+            async with httpx.AsyncClient(timeout=20.0, headers=_headers()) as c:
+                r = await c.get(url)
         if r.status_code != 200:
             return _ticker_to_cik or {}
         data = r.json()
@@ -91,37 +112,44 @@ async def _load_ticker_map() -> dict[str, str]:
 
 async def _fetch_companyfacts(cik: str) -> dict | None:
     cached = _facts_cache.get(cik)
-    if cached and (_now() - cached[0]) < _CACHE_TTL:
+    if cached and _cache_is_fresh(cached):
         return cached[1]
     url = f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
     try:
-        async with httpx.AsyncClient(timeout=20.0, headers=_headers()) as c:
-            r = await c.get(url)
+        async with _SEC_SEMAPHORE:
+            async with httpx.AsyncClient(timeout=20.0, headers=_headers()) as c:
+                r = await c.get(url)
         if r.status_code != 200:
+            # Cache the failure briefly so a temporary 429 doesn't poison
+            # the cache for 12 hours — next user request will retry.
             _facts_cache[cik] = (_now(), None)
             return None
         data = r.json()
         _facts_cache[cik] = (_now(), data)
         return data
     except httpx.HTTPError:
+        _facts_cache[cik] = (_now(), None)
         return None
 
 
 async def _fetch_submissions(cik: str) -> dict | None:
     cached = _subs_cache.get(cik)
-    if cached and (_now() - cached[0]) < _CACHE_TTL:
+    if cached and _cache_is_fresh(cached):
         return cached[1]
     url = f"https://data.sec.gov/submissions/CIK{cik}.json"
     try:
-        async with httpx.AsyncClient(timeout=20.0, headers=_headers()) as c:
-            r = await c.get(url)
+        async with _SEC_SEMAPHORE:
+            async with httpx.AsyncClient(timeout=20.0, headers=_headers()) as c:
+                r = await c.get(url)
         if r.status_code != 200:
+            # Short-TTL negative cache — see _fetch_companyfacts note.
             _subs_cache[cik] = (_now(), None)
             return None
         data = r.json()
         _subs_cache[cik] = (_now(), data)
         return data
     except httpx.HTTPError:
+        _subs_cache[cik] = (_now(), None)
         return None
 
 
