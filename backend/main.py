@@ -902,8 +902,28 @@ def list_companies() -> dict:
 # ---------------------------------------------------------------------------
 # Twelve Data fallback — lets us handle tickers beyond the SEED_COMPANIES set
 # ---------------------------------------------------------------------------
-_PROFILE_TTL_SECONDS = 3600  # 1 hour — Twelve Data free tier is rate-limited
+# Free tier is 8 credits/minute. Each /quote hit = 1 credit, and we invoke
+# it twice per company page load (once inside get_company for market-cap
+# math, once from the /quote endpoint for 52-week range + avg volume). Without
+# caching that ceilings the site at 4 page loads/minute before null fields
+# start showing. 120s of staleness is fine for market-cap-style data.
+_PROFILE_TTL_SECONDS = 3600  # 1 hour — profile data is near-static
+_QUOTE_TTL_SECONDS = 120     # 2 minutes — enough to smooth bursts
+_FAIL_TTL_SECONDS = 60       # 60s negative cache so a single rate-limit
+                              # doesn't hide fields for an hour
+
 _profile_cache: dict[str, tuple[float, dict | None]] = {}
+# ticker (upper) → (timestamp, raw /quote JSON or None). Shared by
+# _fetch_twelvedata_quote_basic (used by get_company) AND the /quote
+# endpoint so both code paths amortise one API call per ticker.
+_quote_cache: dict[str, tuple[float, dict | None]] = {}
+
+
+def _cache_fresh(ts: float, val: object, success_ttl: int) -> bool:
+    """Success values get the full TTL; failure (None) values expire fast
+    so a one-off rate-limit doesn't poison the cache for the full window."""
+    ttl = success_ttl if val is not None else _FAIL_TTL_SECONDS
+    return (_now() - ts) < ttl
 
 
 async def _fetch_twelvedata_profile(ticker: str) -> dict | None:
@@ -913,7 +933,7 @@ async def _fetch_twelvedata_profile(ticker: str) -> dict | None:
         return None
 
     cached = _profile_cache.get(ticker)
-    if cached and (_now() - cached[0]) < _PROFILE_TTL_SECONDS:
+    if cached and _cache_fresh(cached[0], cached[1], _PROFILE_TTL_SECONDS):
         return cached[1]
 
     try:
@@ -932,18 +952,26 @@ async def _fetch_twelvedata_profile(ticker: str) -> dict | None:
         _profile_cache[ticker] = (_now(), data)
         return data
     except httpx.HTTPError:
+        _profile_cache[ticker] = (_now(), None)
         return None
 
 
 async def _fetch_twelvedata_quote_basic(ticker: str) -> dict | None:
-    """Fetch just the /quote payload — works on free tier.
+    """Fetch the /quote payload — works on free tier.
 
     Returned shape is the raw Twelve Data JSON (has `name`, `exchange`,
-    `fifty_two_week`, etc). Used as a fallback when /profile is gated.
+    `fifty_two_week`, `average_volume`, etc). Shared cache with the
+    /api/company/{ticker}/quote endpoint so one network call feeds both
+    the market-cap computation and the header stats.
     """
     api_key = os.getenv("TWELVE_DATA_API_KEY")
     if not api_key:
         return None
+
+    cached = _quote_cache.get(ticker)
+    if cached and _cache_fresh(cached[0], cached[1], _QUOTE_TTL_SECONDS):
+        return cached[1]
+
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             r = await client.get(
@@ -951,12 +979,16 @@ async def _fetch_twelvedata_quote_basic(ticker: str) -> dict | None:
                 params={"symbol": ticker, "apikey": api_key},
             )
         if r.status_code != 200:
+            _quote_cache[ticker] = (_now(), None)
             return None
         data = r.json()
         if isinstance(data, dict) and data.get("status") == "error":
+            _quote_cache[ticker] = (_now(), None)
             return None
+        _quote_cache[ticker] = (_now(), data)
         return data
     except httpx.HTTPError:
+        _quote_cache[ticker] = (_now(), None)
         return None
 
 
@@ -1771,40 +1803,23 @@ def _to_int(v: Any) -> int | None:
 async def get_quote(ticker: str) -> dict:
     """
     Live quote: current price, volume, avg volume, 52-week range, daily change.
+
+    Routes through the shared _quote_cache so we don't burn a second Twelve
+    Data credit when the company page also calls get_company (which needs
+    /quote for market-cap math). That pattern would otherwise double our
+    API spend per page and cause the 8-credits/min free tier to rate-limit
+    52-week range + avg-volume for every concurrent visitor.
     """
     ticker = ticker.upper().strip()
-    api_key = os.getenv("TWELVE_DATA_API_KEY")
-    if not api_key:
+    if not os.getenv("TWELVE_DATA_API_KEY"):
         return {
             "ticker": ticker,
             "error": "TWELVE_DATA_API_KEY not configured on the server.",
         }
 
-    url = "https://api.twelvedata.com/quote"
-    params = {"symbol": ticker, "apikey": api_key}
-
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            r = await client.get(url, params=params)
-    except httpx.HTTPError as exc:
-        return {"ticker": ticker, "error": f"twelvedata network error: {exc}"}
-
-    if r.status_code != 200:
-        return {"ticker": ticker, "error": f"twelvedata HTTP {r.status_code}"}
-
-    try:
-        data = r.json()
-    except Exception:  # noqa: BLE001
-        return {
-            "ticker": ticker,
-            "error": f"twelvedata bad JSON (preview: {r.text[:120]!r})",
-        }
-
-    if isinstance(data, dict) and data.get("status") == "error":
-        return {
-            "ticker": ticker,
-            "error": f"twelvedata error: {data.get('message', 'unknown')}",
-        }
+    data = await _fetch_twelvedata_quote_basic(ticker)
+    if data is None:
+        return {"ticker": ticker, "error": "twelvedata unavailable (rate limit or network)"}
 
     fw = data.get("fifty_two_week") or {}
 
