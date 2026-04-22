@@ -229,23 +229,167 @@ TICKER_TO_SPONSOR: dict[str, str] = {
     "MRNA": "Moderna",
 }
 
-# Popular biotech tickers — mirrors lib/universe.ts on the frontend. Used by
-# /api/search as a known-healthcare fast-path so autocomplete doesn't pay the
-# EDGAR classification cost for the common case.
-_POPULAR_HEALTHCARE: frozenset[str] = frozenset(
-    {
-        "MRNA", "VRTX", "CRSP", "BEAM", "SRPT", "NTLA", "REGN", "BNTX",
-        "EDIT", "BIIB", "ALNY", "MDGL", "ARWR", "INSM", "GILD",
-        # Megacap pharma — common searches
-        "PFE", "MRK", "LLY", "JNJ", "ABBV", "NVO", "AZN", "BMY", "AMGN",
-        "SNY", "GSK", "NVS", "RHHBY", "TAK",
-        # Common mid/small biotech searches
-        "IONS", "MRTX", "BLUE", "VRCA", "KRYS", "LGND", "ACAD",
-        "EXEL", "HALO", "BMRN", "SGEN", "RIGL", "RARE", "VKTX", "AXSM",
-        "CRNX", "CPRX", "ETNB", "IMVT", "INCY", "ITCI", "MNMD", "NBIX",
-        "PTCT", "RNA", "RYTM", "SAVA", "SMMT", "TGTX", "TVTX",
-    }
-)
+# Popular healthcare directory. Maps ticker -> (primary_name, exchange, aliases).
+# Used by /api/search two ways:
+#   1. Known-healthcare fast-path — skip EDGAR classification for these.
+#   2. Local name/alias match — before hitting Twelve Data, resolve queries
+#      like "medtronic" or "crispr" against this directory so common companies
+#      show up even when Twelve Data's symbol_search doesn't surface them.
+# Aliases are short forms/shorthand ("Vertex" for "Vertex Pharmaceuticals").
+_HEALTHCARE_DIRECTORY: dict[str, tuple[str, str, tuple[str, ...]]] = {
+    # Gene editing / RNAi / cell therapy
+    "MRNA": ("Moderna", "NASDAQ", ()),
+    "VRTX": ("Vertex Pharmaceuticals", "NASDAQ", ("Vertex",)),
+    "CRSP": ("CRISPR Therapeutics", "NASDAQ", ("CRISPR",)),
+    "BEAM": ("Beam Therapeutics", "NASDAQ", ("Beam",)),
+    "SRPT": ("Sarepta Therapeutics", "NASDAQ", ("Sarepta",)),
+    "NTLA": ("Intellia Therapeutics", "NASDAQ", ("Intellia",)),
+    "EDIT": ("Editas Medicine", "NASDAQ", ("Editas",)),
+    "ALNY": ("Alnylam Pharmaceuticals", "NASDAQ", ("Alnylam",)),
+    "ARWR": ("Arrowhead Pharmaceuticals", "NASDAQ", ("Arrowhead",)),
+    "IONS": ("Ionis Pharmaceuticals", "NASDAQ", ("Ionis",)),
+    "BLUE": ("bluebird bio", "NASDAQ", ("bluebird",)),
+    "KRYS": ("Krystal Biotech", "NASDAQ", ("Krystal",)),
+    "VRCA": ("Verrica Pharmaceuticals", "NASDAQ", ("Verrica",)),
+    # Large/mid-cap biotech
+    "REGN": ("Regeneron Pharmaceuticals", "NASDAQ", ("Regeneron",)),
+    "BNTX": ("BioNTech", "NASDAQ", ()),
+    "BIIB": ("Biogen", "NASDAQ", ()),
+    "GILD": ("Gilead Sciences", "NASDAQ", ("Gilead",)),
+    "AMGN": ("Amgen", "NASDAQ", ()),
+    "INCY": ("Incyte", "NASDAQ", ()),
+    "BMRN": ("BioMarin Pharmaceutical", "NASDAQ", ("BioMarin",)),
+    "SGEN": ("Seagen", "NASDAQ", ()),
+    "EXEL": ("Exelixis", "NASDAQ", ()),
+    "HALO": ("Halozyme Therapeutics", "NASDAQ", ("Halozyme",)),
+    "NBIX": ("Neurocrine Biosciences", "NASDAQ", ("Neurocrine",)),
+    "MDGL": ("Madrigal Pharmaceuticals", "NASDAQ", ("Madrigal",)),
+    "INSM": ("Insmed", "NASDAQ", ()),
+    "MRTX": ("Mirati Therapeutics", "NASDAQ", ("Mirati",)),
+    "LGND": ("Ligand Pharmaceuticals", "NASDAQ", ("Ligand",)),
+    "ACAD": ("ACADIA Pharmaceuticals", "NASDAQ", ("ACADIA",)),
+    "RIGL": ("Rigel Pharmaceuticals", "NASDAQ", ("Rigel",)),
+    "RARE": ("Ultragenyx Pharmaceutical", "NASDAQ", ("Ultragenyx",)),
+    "VKTX": ("Viking Therapeutics", "NASDAQ", ("Viking",)),
+    "AXSM": ("Axsome Therapeutics", "NASDAQ", ("Axsome",)),
+    "CRNX": ("Crinetics Pharmaceuticals", "NASDAQ", ("Crinetics",)),
+    "CPRX": ("Catalyst Pharmaceuticals", "NASDAQ", ()),
+    "ETNB": ("89bio", "NASDAQ", ()),
+    "IMVT": ("Immunovant", "NASDAQ", ()),
+    "ITCI": ("Intra-Cellular Therapies", "NASDAQ", ("Intra-Cellular",)),
+    "MNMD": ("Mind Medicine", "NASDAQ", ("MindMed",)),
+    "PTCT": ("PTC Therapeutics", "NASDAQ", ("PTC",)),
+    "RNA": ("Avidity Biosciences", "NASDAQ", ("Avidity",)),
+    "RYTM": ("Rhythm Pharmaceuticals", "NASDAQ", ("Rhythm",)),
+    "SAVA": ("Cassava Sciences", "NASDAQ", ("Cassava",)),
+    "SMMT": ("Summit Therapeutics", "NASDAQ", ("Summit",)),
+    "TGTX": ("TG Therapeutics", "NASDAQ", ()),
+    "TVTX": ("Travere Therapeutics", "NASDAQ", ("Travere",)),
+    # Megacap pharma
+    "PFE": ("Pfizer", "NYSE", ()),
+    "MRK": ("Merck & Co.", "NYSE", ("Merck",)),
+    "LLY": ("Eli Lilly", "NYSE", ("Lilly",)),
+    "JNJ": ("Johnson & Johnson", "NYSE", ("Johnson and Johnson",)),
+    "ABBV": ("AbbVie", "NYSE", ()),
+    "NVO": ("Novo Nordisk", "NYSE", ()),
+    "AZN": ("AstraZeneca", "NASDAQ", ()),
+    "BMY": ("Bristol-Myers Squibb", "NYSE", ("Bristol Myers",)),
+    "SNY": ("Sanofi", "NASDAQ", ()),
+    "GSK": ("GSK plc", "NYSE", ("GlaxoSmithKline",)),
+    "NVS": ("Novartis", "NYSE", ()),
+    "RHHBY": ("Roche Holding", "OTC", ("Roche",)),
+    "TAK": ("Takeda Pharmaceutical", "NYSE", ("Takeda",)),
+    # Medical devices
+    "MDT": ("Medtronic", "NYSE", ()),
+    "ISRG": ("Intuitive Surgical", "NASDAQ", ("Intuitive",)),
+    "SYK": ("Stryker", "NYSE", ()),
+    "BSX": ("Boston Scientific", "NYSE", ()),
+    "EW": ("Edwards Lifesciences", "NYSE", ("Edwards",)),
+    "DXCM": ("DexCom", "NASDAQ", ("Dexcom",)),
+    "BDX": ("Becton Dickinson", "NYSE", ("BD",)),
+    "ZBH": ("Zimmer Biomet", "NYSE", ("Zimmer",)),
+    "ABT": ("Abbott Laboratories", "NYSE", ("Abbott",)),
+    "BAX": ("Baxter International", "NYSE", ("Baxter",)),
+    "PODD": ("Insulet", "NASDAQ", ()),
+    "HOLX": ("Hologic", "NASDAQ", ()),
+    "RMD": ("ResMed", "NYSE", ()),
+    "IDXX": ("IDEXX Laboratories", "NASDAQ", ("IDEXX",)),
+    # Life-sciences tools / diagnostics
+    "TMO": ("Thermo Fisher Scientific", "NYSE", ("Thermo Fisher",)),
+    "DHR": ("Danaher", "NYSE", ()),
+    "WAT": ("Waters Corporation", "NYSE", ("Waters",)),
+    "A": ("Agilent Technologies", "NYSE", ("Agilent",)),
+    "MTD": ("Mettler-Toledo", "NYSE", ("Mettler",)),
+    "ILMN": ("Illumina", "NASDAQ", ()),
+    "LH": ("Labcorp Holdings", "NYSE", ("Labcorp", "Laboratory Corporation")),
+    "DGX": ("Quest Diagnostics", "NYSE", ("Quest",)),
+    "CRL": ("Charles River Laboratories", "NYSE", ("Charles River",)),
+    "ICLR": ("ICON plc", "NASDAQ", ("ICON",)),
+    "IQV": ("IQVIA Holdings", "NYSE", ("IQVIA",)),
+    "EXAS": ("Exact Sciences", "NASDAQ", ()),
+    "NTRA": ("Natera", "NASDAQ", ()),
+    "GH": ("Guardant Health", "NASDAQ", ("Guardant",)),
+    # Managed care / services / distribution
+    "UNH": ("UnitedHealth Group", "NYSE", ("UnitedHealth",)),
+    "CVS": ("CVS Health", "NYSE", ("CVS",)),
+    "CI": ("Cigna Group", "NYSE", ("Cigna",)),
+    "HUM": ("Humana", "NYSE", ()),
+    "ELV": ("Elevance Health", "NYSE", ("Elevance", "Anthem")),
+    "CNC": ("Centene", "NYSE", ()),
+    "MOH": ("Molina Healthcare", "NYSE", ("Molina",)),
+    "MCK": ("McKesson", "NYSE", ()),
+    "CAH": ("Cardinal Health", "NYSE", ("Cardinal",)),
+    "COR": ("Cencora", "NYSE", ("AmerisourceBergen",)),
+    "WBA": ("Walgreens Boots Alliance", "NASDAQ", ("Walgreens",)),
+}
+
+# Derived set used by the /api/search fast-path check.
+_POPULAR_HEALTHCARE: frozenset[str] = frozenset(_HEALTHCARE_DIRECTORY.keys())
+
+
+def _local_healthcare_match(q: str, limit: int) -> list[dict]:
+    """
+    Search the local healthcare directory by ticker prefix, name prefix,
+    or alias prefix (then substring). Returns up to `limit` hits sorted by
+    match quality. Zero network calls — this runs on every keystroke.
+    """
+    q_clean = q.strip()
+    if not q_clean:
+        return []
+    q_upper = q_clean.upper()
+    q_lower = q_clean.lower()
+
+    # Rank 0 = ticker prefix, 1 = name/alias prefix, 2 = name/alias substring.
+    scored: list[tuple[int, str, dict]] = []
+    for ticker, (name, exchange, aliases) in _HEALTHCARE_DIRECTORY.items():
+        name_l = name.lower()
+        alias_ls = tuple(a.lower() for a in aliases)
+
+        rank: int | None = None
+        if ticker.startswith(q_upper):
+            rank = 0
+        elif name_l.startswith(q_lower) or any(a.startswith(q_lower) for a in alias_ls):
+            rank = 1
+        elif q_lower in name_l or any(q_lower in a for a in alias_ls):
+            rank = 2
+
+        if rank is not None:
+            scored.append(
+                (
+                    rank,
+                    ticker,
+                    {
+                        "symbol": ticker,
+                        "name": name,
+                        "exchange": exchange,
+                        "country": "United States",
+                        "type": "Common Stock",
+                    },
+                )
+            )
+
+    scored.sort(key=lambda x: (x[0], x[1]))
+    return [hit for (_, _, hit) in scored[:limit]]
 
 # ---------------------------------------------------------------------------
 # Seed data — catalyst events
@@ -985,29 +1129,45 @@ async def search_tickers(q: str, limit: int = 8) -> dict:
     if not q:
         return {"query": q, "results": []}
 
+    # Pass 1 — local healthcare directory.
+    # Resolves common queries like "medtronic", "crispr", "intuitive" against
+    # an in-process dict with zero network calls. This catches cases where
+    # Twelve Data's symbol_search fails to surface the right ticker (either
+    # because the query is a fuzzy name match it doesn't rank high, or
+    # because the company is a medical-device / diagnostics name outside our
+    # original biotech-heavy _POPULAR_HEALTHCARE set).
+    local_hits = _local_healthcare_match(q, limit)
+    if len(local_hits) >= limit:
+        return {"query": q, "results": local_hits}
+
+    # Pass 2 — Twelve Data symbol_search.
     # Overfetch modestly so the healthcare filter has enough to choose from
-    # without exploding the per-keystroke fan-out. 1.5x is the sweet spot —
-    # enough slack that filter misses don't drop the result count, few enough
-    # candidates that classification stays snappy.
-    overfetch = max(int(limit * 1.5), limit + 2)
+    # without exploding the per-keystroke fan-out. 20 is enough slack that
+    # filter misses don't drop the result count while keeping classification
+    # snappy.
+    overfetch = max(int(limit * 2), limit + 4)
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             r = await client.get(
                 "https://api.twelvedata.com/symbol_search",
-                params={"symbol": q, "outputsize": min(overfetch, 15)},
+                params={"symbol": q, "outputsize": min(overfetch, 20)},
             )
         if r.status_code != 200:
+            # Twelve Data unreachable — fall back to whatever local hits we
+            # found rather than returning an empty dropdown.
             return {
                 "query": q,
-                "results": [],
+                "results": local_hits,
                 "error": f"twelvedata HTTP {r.status_code}",
             }
         data = r.json()
     except httpx.HTTPError as exc:
-        return {"query": q, "results": [], "error": str(exc)}
+        return {"query": q, "results": local_hits, "error": str(exc)}
 
     raw = data.get("data", []) if isinstance(data, dict) else []
-    seen: set[str] = set()
+    # Seed the dedupe set with local-match symbols so Twelve Data can't
+    # surface a duplicate entry.
+    seen: set[str] = {hit["symbol"] for hit in local_hits}
     # Prefer US-listed common stocks; push others to the end
     primary: list[dict] = []
     secondary: list[dict] = []
@@ -1039,25 +1199,24 @@ async def search_tickers(q: str, limit: int = 8) -> dict:
     # request stays fast.
     ordered = primary + secondary
     if not ordered:
-        return {"query": q, "results": []}
+        return {"query": q, "results": local_hits}
 
     # Fast-path: tickers we already know are healthcare (seeded + the popular
-    # biotech universe we curate across Screener/Pipeline/Heatmap/Catalysts)
-    # skip the EDGAR classify. That collapses the common case — users typing
-    # a familiar ticker — to a zero-network-hop filter.
+    # biotech universe) skip the EDGAR classify. That collapses the common
+    # case — users typing a familiar ticker — to a zero-network-hop filter.
     known_healthcare = set(SEED_COMPANIES.keys()) | _POPULAR_HEALTHCARE
     known_hits = [hit for hit in ordered if hit["symbol"] in known_healthcare]
 
-    # If the known-healthcare set alone already satisfies the limit, return
-    # immediately. No EDGAR round-trips on the hot path — autocomplete feels
-    # instant for the 95% case (typing a familiar biotech ticker).
-    if len(known_hits) >= limit:
-        return {"query": q, "results": known_hits[:limit]}
+    # If local_hits + known_hits from Twelve Data satisfy the limit, return
+    # immediately and skip EDGAR entirely.
+    if len(local_hits) + len(known_hits) >= limit:
+        merged = local_hits + known_hits
+        return {"query": q, "results": merged[:limit]}
 
     # Otherwise classify the unknowns, but only as many as we still need to
     # fill the limit — classifying extras just burns latency we won't surface.
     unknowns = [hit for hit in ordered if hit["symbol"] not in known_healthcare]
-    needed = limit - len(known_hits)
+    needed = limit - len(local_hits) - len(known_hits)
     to_classify = unknowns[: max(needed * 2, needed + 2)]
 
     checks = await asyncio.gather(
@@ -1075,12 +1234,13 @@ async def search_tickers(q: str, limit: int = 8) -> dict:
         hit["symbol"]: (ok is True)
         for hit, ok in zip(to_classify, checks)
     }
-    filtered = [
+    td_filtered = [
         hit
         for hit in ordered
         if hit["symbol"] in known_healthcare or classify_map.get(hit["symbol"], False)
     ]
-    return {"query": q, "results": filtered[:limit]}
+    merged = local_hits + td_filtered
+    return {"query": q, "results": merged[:limit]}
 
 
 # ---------------------------------------------------------------------------
