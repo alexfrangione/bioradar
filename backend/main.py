@@ -1210,6 +1210,30 @@ async def get_screener(tickers: str = "") -> dict:
             # via their own fallback chain rather than inherit a miss from
             # the bulk screener load.
 
+        # Second pass — Yahoo's bulk endpoint randomly drops 1–3 tickers out of
+        # every ~15 even when the chunk succeeds overall. Re-request just the
+        # missing symbols in small batches; most will come back on the retry.
+        missing = [t for t in to_fetch if t not in derived]
+        if missing:
+            RETRY_CHUNK = 8
+            retry_chunks = [
+                missing[i : i + RETRY_CHUNK]
+                for i in range(0, len(missing), RETRY_CHUNK)
+            ]
+            retry_results = await asyncio.gather(
+                *[
+                    asyncio.to_thread(_fetch_yfinance_bulk_sync, chunk, "1y")
+                    for chunk in retry_chunks
+                ],
+                return_exceptions=True,
+            )
+            for result in retry_results:
+                if isinstance(result, dict):
+                    for t, quote in result.items():
+                        if quote is not None and t not in derived:
+                            derived[t] = quote
+                            _quote_cache[t] = (_now(), quote)
+
     async def build_row(ticker: str) -> dict | None:
         seed = SEED_COMPANIES.get(ticker)
         if seed is not None:
@@ -1259,6 +1283,14 @@ async def get_screener(tickers: str = "") -> dict:
             if pe_ratio is None:
                 pe_ratio = edgar_data.get("pe_ratio")
 
+        # Fall back to the directory-level display name so a ticker with no
+        # EDGAR / no quote still shows up in the table with empty metrics
+        # rather than vanishing entirely. Keeping the row also means the
+        # frontend count matches the requested universe.
+        if name is None:
+            directory_entry = _HEALTHCARE_DIRECTORY.get(ticker)
+            if directory_entry is not None:
+                name = directory_entry[0]
         if (
             name is None
             and market_cap is None

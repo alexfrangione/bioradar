@@ -62,8 +62,8 @@ export default async function CompanyPage({ params }: { params: Params }) {
           quote={quote}
           pipeline={pipeline}
           prices={prices?.points ?? []}
-          catalysts={catalysts?.events ?? []}
-          earnings={earnings?.events ?? []}
+          catalysts={catalysts === null ? undefined : (catalysts.events ?? [])}
+          earnings={earnings === null ? undefined : (earnings.events ?? [])}
           trials={pipeline?.trials ?? []}
         />
       )}
@@ -86,8 +86,11 @@ function CompanyHeader({
   quote: Quote | null;
   pipeline: PipelineResponse | null;
   prices: PricePoint[];
-  catalysts: CatalystEvent[];
-  earnings: EarningsEvent[];
+  // `undefined` = the backend fetch failed → tell the client-side chart to
+  // refetch on mount instead of latching onto an empty array. `[]` = the
+  // backend returned 200 with no events (genuinely nothing to show).
+  catalysts: CatalystEvent[] | undefined;
+  earnings: EarningsEvent[] | undefined;
   trials: Trial[];
 }) {
   const hasPrice = quote && !quote.error && quote.price != null;
